@@ -1,6 +1,7 @@
 package api
 
 type DeploymentDTO struct {
-	DeploymentName string
-	DeploymentYAML []byte
+	DeploymentName      string
+	Static              bool
+	DeploymentYAMLBytes []byte
 }
