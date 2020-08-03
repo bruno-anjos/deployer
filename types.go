@@ -1,13 +1,22 @@
 package main
 
+import "github.com/docker/go-connections/nat"
+
 type DeploymentYAML struct {
 	Spec struct {
 		Replicas    int
 		ServiceName string
-		Template struct{
-			Spect struct{
-				Containers struct{
-					
+		Template    struct {
+			Spec struct {
+				Containers []struct {
+					Image string
+					Env   []struct {
+						Name  string
+						Value string
+					}
+					Ports []struct {
+						ContainerPort string
+					}
 				}
 			}
 		}
@@ -17,5 +26,9 @@ type DeploymentYAML struct {
 type Deployment struct {
 	DeploymentName    string
 	NumberOfInstances int
-	EnvVars           string
+	Image             string
+	EnvVars           []string
+	Ports             nat.PortSet
+	Static            bool
+	InstancesIds      []string
 }
