@@ -20,8 +20,12 @@ const (
 )
 
 var (
-	DefaultHostPort = utils.DefaultInterface + ":" + strconv.Itoa(Port)
+	DefaultHostPort = utils.LocalhostAddr + ":" + strconv.Itoa(Port)
 )
+
+func GetDeploymentsPath() string {
+	return PrefixPath + DeploymentsPath
+}
 
 func GetDeploymentPath(deploymentId string) string {
 	return PrefixPath + fmt.Sprintf(DeploymentPath, deploymentId)
