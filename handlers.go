@@ -41,7 +41,7 @@ func getDeploymentsHandler(w http.ResponseWriter, _ *http.Request) {
 	http_utils.SendJSONReplyOK(w, deploymentsToSend)
 }
 
-func registerDeploymentHandler(w http.ResponseWriter, r *http.Request) {
+func registerDeploymentHandler(_ http.ResponseWriter, r *http.Request) {
 	log.Debug("handling register deployment request")
 
 	var deploymentDTO api.DeploymentDTO
@@ -57,7 +57,10 @@ func registerDeploymentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deployment := deploymentYAMLToDeployment(&deploymentYAML, deploymentDTO.Static)
+	go addDeploymentAsync(deployment)
+}
 
+func addDeploymentAsync(deployment *Deployment) {
 	servicePath := archimedes.GetServicePath(deployment.DeploymentName)
 
 	service := archimedes.ServiceDTO{
@@ -71,11 +74,8 @@ func registerDeploymentHandler(w http.ResponseWriter, r *http.Request) {
 	req := http_utils.BuildRequest(http.MethodPost, archimedes.DefaultHostPort, servicePath, service)
 	status, _ := http_utils.DoRequest(httpClient, req, nil)
 
-	switch status {
-	case http.StatusOK:
-	default:
+	if status != http.StatusOK {
 		log.Errorf("got status code %d from archimedes", status)
-		w.WriteHeader(status)
 		return
 	}
 
@@ -95,16 +95,19 @@ func registerDeploymentHandler(w http.ResponseWriter, r *http.Request) {
 		var resp *http.Response
 		status, resp = http_utils.DoRequest(httpClient, req, nil)
 
-		switch status {
-		case http.StatusOK:
-			err = json.NewDecoder(resp.Body).Decode(&instanceId)
-			if err != nil {
-				panic(err)
-			}
-		default:
+		if status != http.StatusOK {
 			log.Errorf("got status code %d from scheduler", status)
-			w.WriteHeader(status)
+			req = http_utils.BuildRequest(http.MethodDelete, archimedes.DefaultHostPort, servicePath, nil)
+			status, _ = http_utils.DoRequest(httpClient, req, nil)
+			if status != http.StatusOK {
+				log.Error("error deleting service that failed initializing")
+			}
 			return
+		}
+
+		err := json.NewDecoder(resp.Body).Decode(&instanceId)
+		if err != nil {
+			panic(err)
 		}
 
 		instanceIds = append(instanceIds, instanceId)
