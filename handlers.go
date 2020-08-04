@@ -2,12 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	genericutils "github.com/bruno-anjos/solution-utils"
-	"github.com/docker/go-connections/nat"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"sync"
 	"time"
+
+	genericutils "github.com/bruno-anjos/solution-utils"
+	"github.com/docker/go-connections/nat"
+	log "github.com/sirupsen/logrus"
 
 	archimedes "github.com/bruno-anjos/archimedes/api"
 	"github.com/bruno-anjos/deployer/api"
@@ -41,7 +42,7 @@ func getDeploymentsHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func registerDeploymentHandler(w http.ResponseWriter, r *http.Request) {
-	deploymentId := http_utils.ExtractPathVar(r, deploymentIdPathVar)
+	log.Debug("handling register deployment request")
 
 	var deploymentDTO api.DeploymentDTO
 	err := json.NewDecoder(r.Body).Decode(&deploymentDTO)
@@ -89,11 +90,17 @@ func registerDeploymentHandler(w http.ResponseWriter, r *http.Request) {
 	var instanceIds []string
 	var instanceId string
 	for i := 0; i < deployment.NumberOfInstances; i++ {
-		req = http_utils.BuildRequest(http.MethodPost, scheduler.DefaultHostPort, scheduler.InstancesPath, containerInstance)
-		status, _ = http_utils.DoRequest(httpClient, req, &instanceId)
+		req = http_utils.BuildRequest(http.MethodPost, scheduler.DefaultHostPort, scheduler.GetInstancesPath(),
+			containerInstance)
+		var resp *http.Response
+		status, resp = http_utils.DoRequest(httpClient, req, nil)
 
 		switch status {
 		case http.StatusOK:
+			err = json.NewDecoder(resp.Body).Decode(&instanceId)
+			if err != nil {
+				panic(err)
+			}
 		default:
 			log.Errorf("got status code %d from scheduler", status)
 			w.WriteHeader(status)
@@ -104,14 +111,16 @@ func registerDeploymentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deployment.InstancesIds = instanceIds
-	deployments.Store(deploymentId, deployment)
+	deployments.Store(deployment.DeploymentName, deployment)
 }
 
 func deploymentYAMLToDeployment(deploymentYAML *DeploymentYAML, static bool) *Deployment {
+	log.Debugf("%+v", deploymentYAML)
+
 	numContainers := len(deploymentYAML.Spec.Template.Spec.Containers)
 	if numContainers > 1 {
 		panic("more than one container per service is not supported")
-	} else if numContainers != 0 {
+	} else if numContainers == 0 {
 		panic("no container provided")
 	}
 
