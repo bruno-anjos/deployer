@@ -18,7 +18,8 @@ const (
 )
 
 var (
-	DefaultHostPort = "deployer" + ":" + strconv.Itoa(Port)
+	DeployerServiceName = "deployer"
+	DefaultHostPort = DeployerServiceName + ":" + strconv.Itoa(Port)
 )
 
 func GetDeploymentsPath() string {
