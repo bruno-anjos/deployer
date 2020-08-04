@@ -16,11 +16,11 @@ const (
 
 // Path variables
 const (
-	deploymentIdPathVar = "deploymentId"
+	DeploymentIdPathVar = "deploymentId"
 )
 
 var (
-	_deploymentIdPathVarFormatted = fmt.Sprintf(http_utils.PathVarFormat, deploymentIdPathVar)
+	_deploymentIdPathVarFormatted = fmt.Sprintf(http_utils.PathVarFormat, DeploymentIdPathVar)
 
 	deploymentsRoute = api.DeploymentsPath
 	deploymentRoute  = fmt.Sprintf(api.DeploymentPath, _deploymentIdPathVarFormatted)
