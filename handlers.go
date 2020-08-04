@@ -150,5 +150,7 @@ func deploymentYAMLToDeployment(deploymentYAML *DeploymentYAML, static bool) *De
 		Static:            static,
 	}
 
+	log.Debugf("%+v", deployment)
+
 	return &deployment
 }
