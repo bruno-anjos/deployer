@@ -5,7 +5,7 @@ import "github.com/docker/go-connections/nat"
 type DeploymentYAML struct {
 	Spec struct {
 		Replicas    int
-		ServiceName string
+		ServiceName string `yaml:"serviceName"`
 		Template    struct {
 			Spec struct {
 				Containers []struct {
@@ -15,7 +15,7 @@ type DeploymentYAML struct {
 						Value string
 					}
 					Ports []struct {
-						ContainerPort string
+						ContainerPort string `yaml:"containerPort"`
 					}
 				}
 			}
