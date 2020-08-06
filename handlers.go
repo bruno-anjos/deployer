@@ -22,10 +22,14 @@ type (
 )
 
 var (
+	httpClient  *http.Client
 	deployments sync.Map
 )
 
 func init() {
+	httpClient = &http.Client{
+		Timeout: 10 * time.Second,
+	}
 	deployments = sync.Map{}
 }
 
@@ -57,18 +61,30 @@ func registerDeploymentHandler(_ http.ResponseWriter, r *http.Request) {
 	}
 
 	deployment := deploymentYAMLToDeployment(&deploymentYAML, deploymentDTO.Static)
-	go addDeploymentAsync(deployment)
+	go addDeploymentAsync(deployment, deploymentDTO.DeploymentName)
 }
 
-func addDeploymentAsync(deployment *Deployment) {
-	servicePath := archimedes.GetServicePath(deployment.DeploymentName)
+func deleteDeploymentHandler(w http.ResponseWriter, r *http.Request) {
+	deploymentName := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
+
+	value, ok := deployments.Load(deploymentName)
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	deployment := value.(typeDeploymentsMapValue)
+
+	go deleteDeploymentAsync(deployment, deploymentName)
+}
+
+func addDeploymentAsync(deployment *Deployment, deploymentName string) {
+	log.Debugf("adding deployment %s", deploymentName)
+
+	servicePath := archimedes.GetServicePath(deploymentName)
 
 	service := archimedes.ServiceDTO{
 		Ports: deployment.Ports,
-	}
-
-	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
 	}
 
 	req := http_utils.BuildRequest(http.MethodPost, archimedes.DefaultHostPort, servicePath, service)
@@ -80,7 +96,7 @@ func addDeploymentAsync(deployment *Deployment) {
 	}
 
 	containerInstance := scheduler.ContainerInstanceDTO{
-		ServiceName: deployment.DeploymentName,
+		ServiceName: deploymentName,
 		ImageName:   deployment.Image,
 		Ports:       deployment.Ports,
 		Static:      deployment.Static,
@@ -114,7 +130,30 @@ func addDeploymentAsync(deployment *Deployment) {
 	}
 
 	deployment.InstancesIds = instanceIds
-	deployments.Store(deployment.DeploymentName, deployment)
+	deployments.Store(deploymentName, deployment)
+}
+
+func deleteDeploymentAsync(deployment *Deployment, deploymentName string) {
+	servicePath := archimedes.GetServicePath(deploymentName)
+
+	req := http_utils.BuildRequest(http.MethodDelete, archimedes.DefaultHostPort, servicePath, nil)
+	status, _ := http_utils.DoRequest(httpClient, req, nil)
+
+	if status != http.StatusOK {
+		log.Warnf("got status code %d from archimedes", status)
+		return
+	}
+
+	for _, instance := range deployment.InstancesIds {
+		instancePath := scheduler.GetInstancePath(instance)
+		req = http_utils.BuildRequest(http.MethodDelete, scheduler.DefaultHostPort, instancePath, nil)
+		status, _ = http_utils.DoRequest(httpClient, req, nil)
+
+		if status != http.StatusOK {
+			log.Warnf("got status code %d from scheduler", status)
+			return
+		}
+	}
 }
 
 func deploymentYAMLToDeployment(deploymentYAML *DeploymentYAML, static bool) *Deployment {

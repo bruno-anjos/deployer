@@ -12,6 +12,7 @@ import (
 const (
 	getDeploymentsName     = "GET_DEPLOYMENTS"
 	registerDeploymentName = "REGISTER_DEPLOYMENT"
+	deleteDeploymentName   = "DELETE_DEPLOYMENT"
 )
 
 // Path variables
@@ -39,5 +40,12 @@ var routes = []http_utils.Route{
 		Method:      http.MethodPost,
 		Pattern:     deploymentsRoute,
 		HandlerFunc: registerDeploymentHandler,
+	},
+
+	{
+		Name:        deleteDeploymentName,
+		Method:      http.MethodDelete,
+		Pattern:     deploymentRoute,
+		HandlerFunc: deleteDeploymentHandler,
 	},
 }
