@@ -240,8 +240,12 @@ func deploymentYAMLToDeployment(deploymentYAML *DeploymentYAML, static bool) *De
 }
 
 func onNodeUp(addr string, level int) bool {
-	value, _ := deployersPerLevel.LoadOrStore(level, &sync.RWMutex{})
-	collection := value.(typeDeployersPerLevelMapValue)
+	collection := &DeployerCollection{
+		Deployers: map[string]*Deployer{},
+		Mutex:     &sync.RWMutex{},
+	}
+	value, _ := deployersPerLevel.LoadOrStore(level, collection)
+	collection = value.(typeDeployersPerLevelMapValue)
 
 	var nodeDeployerId string
 
