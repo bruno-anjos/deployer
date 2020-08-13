@@ -252,6 +252,8 @@ func onNodeUp(addr string, level int) bool {
 	req := http_utils.BuildRequest(http.MethodGet, addr+":"+strconv.Itoa(api.Port), api.GetWhoAreYouPath(), nil)
 	status, _ := http_utils.DoRequest(httpClient, req, &nodeDeployerId)
 
+	log.Debugf("other deployer id is %s", nodeDeployerId)
+
 	if status != http.StatusOK {
 		log.Fatalf("got status code %d from other deployer", status)
 	}
@@ -269,9 +271,14 @@ func onNodeUp(addr string, level int) bool {
 		return false
 	}
 
-	req = http_utils.BuildRequest(http.MethodPost, genericutils.LocalhostAddr+":"+strconv.Itoa(archimedes.Port),
-		archimedes.GetNeighborPath(),
-		nil)
+	otherArchimedesAddr := addr + ":" + strconv.Itoa(archimedes.Port)
+	myArchimedesAddr := genericutils.LocalhostAddr + ":" + strconv.Itoa(archimedes.Port)
+
+	neighborDTO := archimedes.NeighborDTO{
+		Addr: otherArchimedesAddr,
+	}
+
+	req = http_utils.BuildRequest(http.MethodPost, myArchimedesAddr, archimedes.GetNeighborPath(), neighborDTO)
 	status, _ = http_utils.DoRequest(httpClient, req, nil)
 
 	if status != http.StatusOK {
