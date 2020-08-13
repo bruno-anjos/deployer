@@ -120,6 +120,15 @@ func addNodeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func wasAddedHandler(_ http.ResponseWriter, r *http.Request) {
+	deployerIdWhoAddedMe := http_utils.ExtractPathVar(r, DeployerIdPathVar)
+	deployer := Deployer{
+		DeployerId: deployerIdWhoAddedMe,
+		Addr:       r.RemoteAddr,
+	}
+	deployers.Store(deployerIdWhoAddedMe, deployer)
+}
+
 func addDeploymentAsync(deployment *Deployment, deploymentName string) {
 	log.Debugf("adding deployment %s", deploymentName)
 
@@ -257,7 +266,8 @@ func onNodeUp(addr string, level int) bool {
 
 	var nodeDeployerId string
 
-	req := http_utils.BuildRequest(http.MethodGet, addr+":"+strconv.Itoa(api.Port), api.GetWhoAreYouPath(), nil)
+	otherDeployerAddr := addr + ":" + strconv.Itoa(api.Port)
+	req := http_utils.BuildRequest(http.MethodGet, otherDeployerAddr, api.GetWhoAreYouPath(), nil)
 	status, _ := http_utils.DoRequest(httpClient, req, &nodeDeployerId)
 
 	log.Debugf("other deployer id is %s", nodeDeployerId)
@@ -274,7 +284,7 @@ func onNodeUp(addr string, level int) bool {
 	collection.Deployers[nodeDeployerId] = deployer
 	collection.Mutex.Unlock()
 
-	_, loaded := deployers.LoadOrStore(deployerId, deployer)
+	_, loaded := deployers.LoadOrStore(nodeDeployerId, deployer)
 	if loaded {
 		return false
 	}
@@ -291,6 +301,9 @@ func onNodeUp(addr string, level int) bool {
 	if status != http.StatusOK {
 		log.Fatalf("got status code %d while adding neighbor in archimedes", status)
 	}
+
+	req = http_utils.BuildRequest(http.MethodPost, otherDeployerAddr, api.GetWasAddedPath(deployerId.String()), nil)
+	http_utils.DoRequest(httpClient, req, nil)
 
 	return true
 }

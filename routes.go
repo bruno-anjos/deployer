@@ -16,23 +16,27 @@ const (
 	deleteDeploymentName           = "DELETE_DEPLOYMENT"
 	whoAreYouName                  = "WHO_ARE_YOU"
 	addNodeName                    = "ADD_NODE"
+	wasAddedName                   = "WAS_ADDED"
 )
 
 // Path variables
 const (
 	DeploymentIdPathVar = "deploymentId"
 	InstanceIdPathVar   = "instanceId"
+	DeployerIdPathVar   = "deployerId"
 )
 
 var (
 	_deploymentIdPathVarFormatted = fmt.Sprintf(http_utils.PathVarFormat, DeploymentIdPathVar)
 	_instanceIdPathVarFormatted   = fmt.Sprintf(http_utils.PathVarFormat, InstanceIdPathVar)
+	_deployerIdPathVarFormatted   = fmt.Sprintf(http_utils.PathVarFormat, DeployerIdPathVar)
 
 	deploymentsRoute                = api.DeploymentsPath
 	deploymentRoute                 = fmt.Sprintf(api.DeploymentPath, _deploymentIdPathVarFormatted)
 	registerDeploymentInstanceRoute = fmt.Sprintf(api.RegisterPath, _deploymentIdPathVarFormatted,
 		_instanceIdPathVarFormatted)
 	addNodeRoute   = api.AddNodePath
+	wasAddedRoute  = fmt.Sprintf(api.WasAddedPath, _deployerIdPathVarFormatted)
 	whoAreYouRoute = api.WhoAreYouPath
 )
 
@@ -70,6 +74,13 @@ var routes = []http_utils.Route{
 		Method:      http.MethodPost,
 		Pattern:     addNodeRoute,
 		HandlerFunc: addNodeHandler,
+	},
+
+	{
+		Name:        wasAddedName,
+		Method:      http.MethodPost,
+		Pattern:     wasAddedRoute,
+		HandlerFunc: wasAddedHandler,
 	},
 
 	{
