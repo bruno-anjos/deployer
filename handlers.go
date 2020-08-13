@@ -123,11 +123,7 @@ func addNodeHandler(w http.ResponseWriter, r *http.Request) {
 func wasAddedHandler(_ http.ResponseWriter, r *http.Request) {
 	log.Debugf("handling request in wasAddedHandler")
 	deployerIdWhoAddedMe := http_utils.ExtractPathVar(r, DeployerIdPathVar)
-	deployer := Deployer{
-		DeployerId: deployerIdWhoAddedMe,
-		Addr:       r.RemoteAddr,
-	}
-	deployers.Store(deployerIdWhoAddedMe, deployer)
+	addNode(deployerIdWhoAddedMe, r.RemoteAddr, 0)
 }
 
 func addDeploymentAsync(deployment *Deployment, deploymentName string) {
@@ -258,13 +254,10 @@ func deploymentYAMLToDeployment(deploymentYAML *DeploymentYAML, static bool) *De
 }
 
 func onNodeUp(addr string, level int) bool {
-	collection := &DeployerCollection{
-		Deployers: map[string]*Deployer{},
-		Mutex:     &sync.RWMutex{},
-	}
-	value, _ := deployersPerLevel.LoadOrStore(level, collection)
-	collection = value.(typeDeployersPerLevelMapValue)
+	return addNode("", addr, level)
+}
 
+func getDeployerIdFromAddr(addr string) string {
 	var nodeDeployerId string
 
 	otherDeployerAddr := addr + ":" + strconv.Itoa(api.Port)
@@ -275,6 +268,21 @@ func onNodeUp(addr string, level int) bool {
 
 	if status != http.StatusOK {
 		log.Fatalf("got status code %d from other deployer", status)
+	}
+
+	return nodeDeployerId
+}
+
+func addNode(nodeDeployerId, addr string, level int) bool {
+	collection := &DeployerCollection{
+		Deployers: map[string]*Deployer{},
+		Mutex:     &sync.RWMutex{},
+	}
+	value, _ := deployersPerLevel.LoadOrStore(level, collection)
+	collection = value.(typeDeployersPerLevelMapValue)
+
+	if nodeDeployerId == "" {
+		nodeDeployerId = getDeployerIdFromAddr(addr)
 	}
 
 	deployer := &Deployer{
@@ -296,13 +304,15 @@ func onNodeUp(addr string, level int) bool {
 		Addr: otherArchimedesAddr,
 	}
 
-	req = http_utils.BuildRequest(http.MethodPost, archimedes.DefaultHostPort, archimedes.GetNeighborPath(), neighborDTO)
-	status, _ = http_utils.DoRequest(httpClient, req, nil)
+	req := http_utils.BuildRequest(http.MethodPost, archimedes.DefaultHostPort, archimedes.GetNeighborPath(),
+		neighborDTO)
+	status, _ := http_utils.DoRequest(httpClient, req, nil)
 
 	if status != http.StatusOK {
 		log.Fatalf("got status code %d while adding neighbor in archimedes", status)
 	}
 
+	otherDeployerAddr := addr + ":" + strconv.Itoa(api.Port)
 	req = http_utils.BuildRequest(http.MethodPost, otherDeployerAddr, api.GetWasAddedPath(deployerId.String()), nil)
 	http_utils.DoRequest(httpClient, req, nil)
 
