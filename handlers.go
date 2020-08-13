@@ -269,7 +269,8 @@ func onNodeUp(addr string, level int) bool {
 		return false
 	}
 
-	req = http_utils.BuildRequest(http.MethodPost, addr+":"+strconv.Itoa(archimedes.Port), archimedes.GetNeighborPath(),
+	req = http_utils.BuildRequest(http.MethodPost, genericutils.LocalhostAddr+":"+strconv.Itoa(archimedes.Port),
+		archimedes.GetNeighborPath(),
 		nil)
 	status, _ = http_utils.DoRequest(httpClient, req, nil)
 
