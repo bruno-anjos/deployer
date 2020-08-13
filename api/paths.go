@@ -12,6 +12,8 @@ const (
 	DeploymentsPath = "/deployments"
 	DeploymentPath  = "/deployments/%s"
 
+	AddNodePath = "/node"
+
 	WhoAreYouPath = "/who"
 )
 
@@ -30,6 +32,10 @@ func GetDeploymentsPath() string {
 
 func GetDeploymentPath(deploymentId string) string {
 	return PrefixPath + fmt.Sprintf(DeploymentPath, deploymentId)
+}
+
+func GetAddNodePath() string {
+	return PrefixPath + AddNodePath
 }
 
 func GetWhoAreYouPath() string {

@@ -14,6 +14,7 @@ const (
 	registerDeploymentName = "REGISTER_DEPLOYMENT"
 	deleteDeploymentName   = "DELETE_DEPLOYMENT"
 	whoAreYouName          = "WHO_ARE_YOU"
+	addNodeName            = "ADD_NODE"
 )
 
 // Path variables
@@ -26,6 +27,7 @@ var (
 
 	deploymentsRoute = api.DeploymentsPath
 	deploymentRoute  = fmt.Sprintf(api.DeploymentPath, _deploymentIdPathVarFormatted)
+	addNodeRoute     = api.AddNodePath
 	whoAreYouRoute   = api.WhoAreYouPath
 )
 
@@ -49,6 +51,13 @@ var routes = []http_utils.Route{
 		Method:      http.MethodDelete,
 		Pattern:     deploymentRoute,
 		HandlerFunc: deleteDeploymentHandler,
+	},
+
+	{
+		Name:        addNodeName,
+		Method:      http.MethodPost,
+		Pattern:     addNodeRoute,
+		HandlerFunc: addNodeHandler,
 	},
 
 	{
