@@ -1,6 +1,10 @@
 package main
 
-import "github.com/docker/go-connections/nat"
+import (
+	"sync"
+
+	"github.com/docker/go-connections/nat"
+)
 
 type DeploymentYAML struct {
 	Spec struct {
@@ -31,4 +35,5 @@ type Deployment struct {
 	Ports             nat.PortSet
 	Static            bool
 	InstancesIds      []string
+	Lock              *sync.RWMutex
 }
