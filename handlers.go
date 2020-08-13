@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"strconv"
 	"sync"
@@ -123,7 +124,11 @@ func addNodeHandler(w http.ResponseWriter, r *http.Request) {
 func wasAddedHandler(_ http.ResponseWriter, r *http.Request) {
 	log.Debugf("handling request in wasAddedHandler")
 	deployerIdWhoAddedMe := http_utils.ExtractPathVar(r, DeployerIdPathVar)
-	addNode(deployerIdWhoAddedMe, r.RemoteAddr, 0)
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		panic(err)
+	}
+	addNode(deployerIdWhoAddedMe, host, 0)
 }
 
 func addDeploymentAsync(deployment *Deployment, deploymentName string) {
