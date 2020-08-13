@@ -4,8 +4,10 @@ github.com/bruno-anjos/archimedes v0.0.0-20200804153633-d07ca32d62f3/go.mod h1:4
 github.com/bruno-anjos/archimedes v0.0.2/go.mod h1:yXwbtTMVllh6bPWOKC/ZS/aDdvX7yqe1gGNe+GIod9U=
 github.com/bruno-anjos/archimedesHTTPClient v0.0.0-20200731165616-9aa4edba78b5/go.mod h1:yXzI3IH6yNelEGD7qD21aYxj32498A9ffcFI62f++vA=
 github.com/bruno-anjos/archimedesHTTPClient v0.0.0-20200804154915-4a52ba818e68/go.mod h1:rlkdRglTHHV6eYZzQDq5hhAQFRK0Sys9XYMvRMDuCyw=
+github.com/bruno-anjos/deployer v0.0.1/go.mod h1:rQr8GYBe9FSoi/uHw9EJ50sLF0+DauMcZ+Af7nP3YG8=
 github.com/bruno-anjos/scheduler v0.0.0-20200804140215-71b908c75919 h1:O/MQIQRyQq7IGfAq7W7Oft9AEMyIGwUpDZXREFKvtM0=
 github.com/bruno-anjos/scheduler v0.0.0-20200804140215-71b908c75919/go.mod h1:8NDah+30c2LywmpSb2j10lgBM3lWz53RnNIIEyTf1XM=
+github.com/bruno-anjos/scheduler v0.0.0-20200804151330-da4916073155/go.mod h1:W/RruJL+meRQO5uSR5AFfeWaaYtBJ5VV9d3D6i8GRD4=
 github.com/bruno-anjos/scheduler v0.0.1/go.mod h1:rM3h8PxTJx5yZYJWmKpyFAuBtCYPSU8V1fILbs+JwMA=
 github.com/bruno-anjos/solution-utils v0.0.0-20200711142738-3257ca8b5e39/go.mod h1:S6fgSBlp7Qfd/nQGCR8y+xpnpkB2qz8iiQ9ggsQZPQs=
 github.com/bruno-anjos/solution-utils v0.0.0-20200803160423-4cf841cde3d3/go.mod h1:gcb0Ei5ecFs8PGKbC10vJTslG0r+gem3iTtOi7cfhwY=
