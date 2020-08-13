@@ -3,11 +3,13 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
 	genericutils "github.com/bruno-anjos/solution-utils"
 	"github.com/docker/go-connections/nat"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 
 	archimedes "github.com/bruno-anjos/archimedes/api"
@@ -18,19 +20,42 @@ import (
 )
 
 type (
+	Deployer struct {
+		DeployerId string
+		Addr       string
+	}
+
+	DeployerCollection struct {
+		Deployers map[string]*Deployer
+		Mutex     *sync.RWMutex
+	}
+
 	typeDeploymentsMapValue = *Deployment
+
+	typeDeployersPerLevelMapValue = *DeployerCollection
+
+	typeDeployersMapKey   = string
+	typeDeployersMapValue = *Deployer
 )
 
 var (
-	httpClient  *http.Client
-	deployments sync.Map
+	deployerId uuid.UUID
+
+	httpClient        *http.Client
+	deployments       sync.Map
+	deployersPerLevel sync.Map
+	deployers         sync.Map
 )
 
 func init() {
+	deployerId = uuid.New()
+
 	httpClient = &http.Client{
 		Timeout: 10 * time.Second,
 	}
 	deployments = sync.Map{}
+	deployersPerLevel = sync.Map{}
+	deployers = sync.Map{}
 }
 
 func getDeploymentsHandler(w http.ResponseWriter, _ *http.Request) {
@@ -76,6 +101,23 @@ func deleteDeploymentHandler(w http.ResponseWriter, r *http.Request) {
 	deployment := value.(typeDeploymentsMapValue)
 
 	go deleteDeploymentAsync(deployment, deploymentName)
+}
+
+func whoAreYouHandler(w http.ResponseWriter, _ *http.Request) {
+	http_utils.SendJSONReplyOK(w, deployerId)
+}
+
+func addNodeHandler(w http.ResponseWriter, r *http.Request) {
+	var nodeAddr string
+	err := json.NewDecoder(r.Body).Decode(&nodeAddr)
+	if err != nil {
+		panic(err)
+	}
+
+	if !onNodeUp(nodeAddr, 0) {
+		w.WriteHeader(http.StatusConflict)
+		return
+	}
 }
 
 func addDeploymentAsync(deployment *Deployment, deploymentName string) {
@@ -195,4 +237,45 @@ func deploymentYAMLToDeployment(deploymentYAML *DeploymentYAML, static bool) *De
 	log.Debugf("%+v", deployment)
 
 	return &deployment
+}
+
+func onNodeUp(addr string, level int) bool {
+	value, _ := deployersPerLevel.LoadOrStore(level, &sync.RWMutex{})
+	collection := value.(typeDeployersPerLevelMapValue)
+
+	var nodeDeployerId string
+
+	req := http_utils.BuildRequest(http.MethodGet, addr+":"+strconv.Itoa(api.Port), api.GetWhoAreYouPath(), nil)
+	status, _ := http_utils.DoRequest(httpClient, req, &nodeDeployerId)
+
+	if status != http.StatusOK {
+		log.Fatalf("got status code %d from other deployer", status)
+	}
+
+	deployer := &Deployer{
+		DeployerId: nodeDeployerId,
+		Addr:       addr,
+	}
+	collection.Mutex.Lock()
+	collection.Deployers[nodeDeployerId] = deployer
+	collection.Mutex.Unlock()
+
+	_, loaded := deployers.LoadOrStore(deployerId, deployer)
+	if loaded {
+		return false
+	}
+
+	req = http_utils.BuildRequest(http.MethodPost, addr+":"+strconv.Itoa(archimedes.Port), archimedes.GetNeighborPath(),
+		nil)
+	status, _ = http_utils.DoRequest(httpClient, req, nil)
+
+	if status != http.StatusOK {
+		log.Fatalf("got status code %d while adding neighbor in archimedes", status)
+	}
+
+	return true
+}
+
+func onNodeDown(addr string, level int) {
+
 }
