@@ -272,13 +272,12 @@ func onNodeUp(addr string, level int) bool {
 	}
 
 	otherArchimedesAddr := addr + ":" + strconv.Itoa(archimedes.Port)
-	myArchimedesAddr := genericutils.LocalhostAddr + ":" + strconv.Itoa(archimedes.Port)
 
 	neighborDTO := archimedes.NeighborDTO{
 		Addr: otherArchimedesAddr,
 	}
 
-	req = http_utils.BuildRequest(http.MethodPost, myArchimedesAddr, archimedes.GetNeighborPath(), neighborDTO)
+	req = http_utils.BuildRequest(http.MethodPost, archimedes.DefaultHostPort, archimedes.GetNeighborPath(), neighborDTO)
 	status, _ = http_utils.DoRequest(httpClient, req, nil)
 
 	if status != http.StatusOK {
