@@ -11,6 +11,8 @@ const (
 
 	DeploymentsPath = "/deployments"
 	DeploymentPath  = "/deployments/%s"
+
+	WhoAreYouPath = "/who"
 )
 
 const (
@@ -19,7 +21,7 @@ const (
 
 var (
 	DeployerServiceName = "deployer"
-	DefaultHostPort = DeployerServiceName + ":" + strconv.Itoa(Port)
+	DefaultHostPort     = DeployerServiceName + ":" + strconv.Itoa(Port)
 )
 
 func GetDeploymentsPath() string {
@@ -28,4 +30,8 @@ func GetDeploymentsPath() string {
 
 func GetDeploymentPath(deploymentId string) string {
 	return PrefixPath + fmt.Sprintf(DeploymentPath, deploymentId)
+}
+
+func GetWhoAreYouPath() string {
+	return PrefixPath + WhoAreYouPath
 }
