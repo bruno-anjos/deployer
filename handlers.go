@@ -121,6 +121,7 @@ func addNodeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func wasAddedHandler(_ http.ResponseWriter, r *http.Request) {
+	log.Debugf("handling request in wasAddedHandler")
 	deployerIdWhoAddedMe := http_utils.ExtractPathVar(r, DeployerIdPathVar)
 	deployer := Deployer{
 		DeployerId: deployerIdWhoAddedMe,
@@ -304,6 +305,10 @@ func onNodeUp(addr string, level int) bool {
 
 	req = http_utils.BuildRequest(http.MethodPost, otherDeployerAddr, api.GetWasAddedPath(deployerId.String()), nil)
 	http_utils.DoRequest(httpClient, req, nil)
+
+	if status != http.StatusOK {
+		log.Fatalf("got status code %d while alerting %s that i added him", status, otherDeployerAddr)
+	}
 
 	return true
 }
