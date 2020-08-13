@@ -145,13 +145,10 @@ func addDeploymentAsync(deployment *Deployment, deploymentName string) {
 		EnvVars:     deployment.EnvVars,
 	}
 
-	var instanceIds []string
-	var instanceId string
 	for i := 0; i < deployment.NumberOfInstances; i++ {
 		req = http_utils.BuildRequest(http.MethodPost, scheduler.DefaultHostPort, scheduler.GetInstancesPath(),
 			containerInstance)
-		var resp *http.Response
-		status, resp = http_utils.DoRequest(httpClient, req, nil)
+		status, _ = http_utils.DoRequest(httpClient, req, nil)
 
 		if status != http.StatusOK {
 			log.Errorf("got status code %d from scheduler", status)
@@ -163,16 +160,25 @@ func addDeploymentAsync(deployment *Deployment, deploymentName string) {
 			return
 		}
 
-		err := json.NewDecoder(resp.Body).Decode(&instanceId)
-		if err != nil {
-			panic(err)
-		}
-
-		instanceIds = append(instanceIds, instanceId)
 	}
 
-	deployment.InstancesIds = instanceIds
 	deployments.Store(deploymentName, deployment)
+}
+
+func registerDeploymentInstanceHandler(w http.ResponseWriter, r *http.Request) {
+	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
+	instanceId := http_utils.ExtractPathVar(r, InstanceIdPathVar)
+
+	value, ok := deployments.Load(deploymentId)
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	deployment := value.(typeDeploymentsMapValue)
+	deployment.Lock.Lock()
+	deployment.InstancesIds = append(deployment.InstancesIds, instanceId)
+	deployment.Lock.Unlock()
 }
 
 func deleteDeploymentAsync(deployment *Deployment, deploymentName string) {
@@ -232,6 +238,8 @@ func deploymentYAMLToDeployment(deploymentYAML *DeploymentYAML, static bool) *De
 		EnvVars:           envVars,
 		Ports:             ports,
 		Static:            static,
+		InstancesIds:      []string{},
+		Lock:              &sync.RWMutex{},
 	}
 
 	log.Debugf("%+v", deployment)
