@@ -59,6 +59,8 @@ func init() {
 		Addr: "",
 	}
 
+	log.Debugf("DEPLOYER_ID: %s", deployerId)
+
 	httpClient = &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -533,7 +535,9 @@ func getDeployerIdFromAddr(addr string) string {
 func addNode(nodeDeployerId, addr string) bool {
 	if nodeDeployerId == "" {
 		nodeDeployerId = getDeployerIdFromAddr(addr)
-	} else if nodeDeployerId == myself.Id {
+	}
+
+	if nodeDeployerId == myself.Id {
 		return true
 	}
 
