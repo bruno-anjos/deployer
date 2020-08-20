@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -596,7 +597,10 @@ func writeMyselfToAlternatives(alternativesFilename string) {
 			panic(err)
 		}
 
-		f.Close()
+		err = f.Close()
+		if err != nil {
+			panic(err)
+		}
 
 		<-ticker.C
 	}
@@ -604,6 +608,12 @@ func writeMyselfToAlternatives(alternativesFilename string) {
 
 func loadAlternativesPeriodically(alternativesFilename string) {
 	ticker := time.NewTicker(30 * time.Second)
+
+	var hostname string
+	hostname, err := os.Hostname()
+	if err != nil {
+		panic(err)
+	}
 
 	for {
 		<-ticker.C
@@ -614,14 +624,17 @@ func loadAlternativesPeriodically(alternativesFilename string) {
 			return
 		}
 
-		sc := bufio.NewScanner(f)
-		for sc.Scan() {
-			addr := sc.Text()
-
-			var hostname string
-			hostname, err = os.Hostname()
+		rd := bufio.NewReader(f)
+		for {
+			var addr string
+			addr, err = rd.ReadString('\n')
 			if err != nil {
-				panic(err)
+				if err == io.EOF {
+					break
+				}
+
+				log.Fatalf("read file line error: %v", err)
+				return
 			}
 
 			if addr == hostname {
@@ -629,11 +642,7 @@ func loadAlternativesPeriodically(alternativesFilename string) {
 			}
 
 			onNodeUp(addr)
-		}
 
-		if err = sc.Err(); err != nil {
-			log.Fatalf("scan file error: %v", err)
-			return
 		}
 
 		err = f.Close()
