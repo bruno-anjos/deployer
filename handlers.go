@@ -283,8 +283,8 @@ func checkParentHeartbeatsPeriodically() {
 	for {
 		<-ticker.C
 		deadParents := parentsTable.CheckDeadParents()
-		log.Debugf("dead parents: %+v", deadParents)
 		for _, deadParent := range deadParents {
+			log.Debugf("dead parent: %+v", deadParent)
 			renegotiateParent(deadParent)
 		}
 	}
