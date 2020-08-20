@@ -259,7 +259,7 @@ func iAmYourParentHandler(_ http.ResponseWriter, r *http.Request) {
 	hierarchyTable.SetDeploymentParent(deploymentId, parent)
 }
 
-func getHierarchyTable(w http.ResponseWriter, _ *http.Request) {
+func getHierarchyTableHandler(w http.ResponseWriter, _ *http.Request) {
 	http_utils.SendJSONReplyOK(w, hierarchyTable.ToDTO())
 }
 

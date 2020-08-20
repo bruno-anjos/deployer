@@ -22,6 +22,7 @@ const (
 	deadChildName               = "DEAD_CHILD"
 	takeChildName               = "TAKE_CHILD"
 	iAmYourParentName           = "I_AM_YOUR_PARENT"
+	getHierarchyTableName       = "GET_TABLE"
 
 	// scheduler
 	heartbeatServiceInstanceName         = "HEARTBEAT_SERVICE_INSTANCE"
@@ -50,6 +51,7 @@ var (
 	deadChildRoute         = fmt.Sprintf(api.DeadChildPath, _deploymentIdPathVarFormatted, _deployerIdPathVarFormatted)
 	takeChildRoute         = fmt.Sprintf(api.TakeChildPath, _deploymentIdPathVarFormatted)
 	iAmYourParentRoute     = fmt.Sprintf(api.IAmYourParentPath, _deploymentIdPathVarFormatted)
+	getHierarchyTableRoute = api.GetHierarchyTablePath
 
 	// scheduler
 	deploymentInstanceAliveRoute = fmt.Sprintf(api.DeploymentInstanceAlivePath, _deploymentIdPathVarFormatted,
@@ -155,5 +157,12 @@ var routes = []http_utils.Route{
 		Method:      http.MethodPost,
 		Pattern:     iAmYourParentRoute,
 		HandlerFunc: iAmYourParentHandler,
+	},
+
+	{
+		Name:        getHierarchyTableName,
+		Method:      http.MethodGet,
+		Pattern:     getHierarchyTableRoute,
+		HandlerFunc: getHierarchyTableHandler,
 	},
 }

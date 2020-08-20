@@ -23,6 +23,7 @@ const (
 	DeadChildPath         = "/deployments/%s/deadchild/%s"
 	TakeChildPath         = "/deployments/%s/child"
 	IAmYourParentPath     = "/deployments/%s/parent"
+	GetHierarchyTablePath     = "/table"
 
 	// scheduler
 	DeploymentInstanceAlivePath = "/deployments/%s/%s/alive"
