@@ -3,11 +3,13 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -563,27 +565,45 @@ func simulateAlternatives() {
 		alternativesFilename = "alternatives.txt"
 	)
 
-	f, err := os.OpenFile(alternativesFilename, os.O_APPEND|os.O_WRONLY, 0600)
-	if err != nil {
-		panic(err)
-	}
-
-	hostname, err := os.Hostname()
-	if err != nil {
-		panic(err)
-	}
-
-	if _, err = f.WriteString(hostname + "\n"); err != nil {
-		panic(err)
-	}
-
-	defer f.Close()
-
+	go writeMyselfToAlternatives(alternativesFilename)
 	go loadAlternativesPeriodically(alternativesFilename)
 }
 
+func writeMyselfToAlternatives(alternativesFilename string) {
+	ticker := time.NewTicker(30 * time.Second)
+	for {
+		f, err := os.OpenFile(alternativesFilename, os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			panic(err)
+		}
+
+		bytes, err := ioutil.ReadFile(alternativesFilename)
+		if err != nil {
+			panic(err)
+		}
+
+		hostname, err := os.Hostname()
+		if err != nil {
+			panic(err)
+		}
+
+		alternatives := string(bytes)
+		if strings.Contains(alternatives, hostname) {
+			continue
+		}
+
+		if _, err = f.WriteString(hostname + "\n"); err != nil {
+			panic(err)
+		}
+
+		f.Close()
+
+		<-ticker.C
+	}
+}
+
 func loadAlternativesPeriodically(alternativesFilename string) {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 
 	for {
 		<-ticker.C
