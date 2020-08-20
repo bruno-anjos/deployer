@@ -62,6 +62,41 @@ var (
 
 var routes = []http_utils.Route{
 	{
+		Name:        qualityNotAssuredName,
+		Method:      http.MethodPost,
+		Pattern:     deploymentQualityRoute,
+		HandlerFunc: qualityNotAssuredHandler,
+	},
+
+	{
+		Name:        deadChildName,
+		Method:      http.MethodPost,
+		Pattern:     deadChildRoute,
+		HandlerFunc: deadChildHandler,
+	},
+
+	{
+		Name:        takeChildName,
+		Method:      http.MethodPost,
+		Pattern:     takeChildRoute,
+		HandlerFunc: takeChildHandler,
+	},
+
+	{
+		Name:        iAmYourParentName,
+		Method:      http.MethodPost,
+		Pattern:     iAmYourParentRoute,
+		HandlerFunc: iAmYourParentHandler,
+	},
+
+	{
+		Name:        getHierarchyTableName,
+		Method:      http.MethodGet,
+		Pattern:     getHierarchyTableRoute,
+		HandlerFunc: getHierarchyTableHandler,
+	},
+
+	{
 		Name:        getDeploymentsName,
 		Method:      http.MethodGet,
 		Pattern:     deploymentsRoute,
@@ -129,40 +164,5 @@ var routes = []http_utils.Route{
 		Method:      http.MethodPost,
 		Pattern:     deploymentInstanceRoute,
 		HandlerFunc: registerServiceInstanceHandler,
-	},
-
-	{
-		Name:        qualityNotAssuredName,
-		Method:      http.MethodPost,
-		Pattern:     deploymentQualityRoute,
-		HandlerFunc: qualityNotAssuredHandler,
-	},
-
-	{
-		Name:        deadChildName,
-		Method:      http.MethodPost,
-		Pattern:     deadChildRoute,
-		HandlerFunc: deadChildHandler,
-	},
-
-	{
-		Name:        takeChildName,
-		Method:      http.MethodPost,
-		Pattern:     takeChildRoute,
-		HandlerFunc: takeChildHandler,
-	},
-
-	{
-		Name:        iAmYourParentName,
-		Method:      http.MethodPost,
-		Pattern:     iAmYourParentRoute,
-		HandlerFunc: iAmYourParentHandler,
-	},
-
-	{
-		Name:        getHierarchyTableName,
-		Method:      http.MethodGet,
-		Pattern:     getHierarchyTableRoute,
-		HandlerFunc: getHierarchyTableHandler,
 	},
 }

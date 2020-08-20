@@ -537,6 +537,8 @@ func addNode(nodeDeployerId, addr string) bool {
 		return true
 	}
 
+	log.Debugf("added node %s", nodeDeployerId)
+
 	neighbor := &genericutils.Node{
 		Id:   nodeDeployerId,
 		Addr: addr,
