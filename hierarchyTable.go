@@ -18,6 +18,40 @@ type (
 		NewParentChan       chan<- string
 	}
 
+	HierarchyEntryDTO struct {
+		Parent      *genericutils.Node
+		Grandparent *genericutils.Node
+		Child       map[string]*genericutils.Node
+		Static      bool
+		IsOrphan    bool
+	}
+)
+
+func (e *HierarchyEntry) GetChildren() map[string]*genericutils.Node {
+	entryChildren := map[string]*genericutils.Node{}
+
+	e.Child.Range(func(key, value interface{}) bool {
+		childId := key.(typeChildMapKey)
+		child := value.(typeChildMapValue)
+		entryChildren[childId] = child
+		return true
+	})
+
+	return entryChildren
+}
+
+func (e *HierarchyEntry) ToDTO() *HierarchyEntryDTO {
+	return &HierarchyEntryDTO{
+		Parent:      e.Parent,
+		Grandparent: e.Grandparent,
+		Child:       e.GetChildren(),
+		Static:      e.Static,
+		IsOrphan:    e.IsOrphan,
+	}
+}
+
+type (
+	typeChildMapKey   = string
 	typeChildMapValue = *genericutils.Node
 
 	HierarchyTable struct {
@@ -117,15 +151,7 @@ func (t *HierarchyTable) GetChildren(deploymentId string) (children map[string]*
 	}
 
 	entry := value.(typeHierarchyEntriesMapValue)
-
-	children = map[string]*genericutils.Node{}
-	entry.Child.Range(func(key, value interface{}) bool {
-		child := value.(typeChildMapValue)
-		children[child.Id] = child
-		return true
-	})
-
-	return
+	return entry.GetChildren()
 }
 
 func (t *HierarchyTable) GetParent(deploymentId string) *genericutils.Node {
@@ -234,4 +260,17 @@ func (t *HierarchyTable) GetDeploymentsWithParent(parentId string) (deploymentId
 	})
 
 	return
+}
+
+func (t *HierarchyTable) ToDTO() map[string]*HierarchyEntryDTO {
+	entries := map[string]*HierarchyEntryDTO{}
+
+	t.hierarchyEntries.Range(func(key, value interface{}) bool {
+		deploymentId := key.(typeHierarchyEntriesMapKey)
+		entry := value.(typeHierarchyEntriesMapValue)
+		entries[deploymentId] = entry.ToDTO()
+		return true
+	})
+
+	return entries
 }

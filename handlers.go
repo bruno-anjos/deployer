@@ -259,6 +259,10 @@ func iAmYourParentHandler(_ http.ResponseWriter, r *http.Request) {
 	hierarchyTable.SetDeploymentParent(deploymentId, parent)
 }
 
+func getHierarchyTable(w http.ResponseWriter, _ *http.Request) {
+	http_utils.SendJSONReplyOK(w, hierarchyTable.ToDTO())
+}
+
 func checkParentHeartbeatsPeriodically() {
 	ticker := time.NewTicker(30 * time.Second)
 	for {
@@ -507,6 +511,8 @@ func getDeployerIdFromAddr(addr string) string {
 func addNode(nodeDeployerId, addr string) bool {
 	if nodeDeployerId == "" {
 		nodeDeployerId = getDeployerIdFromAddr(addr)
+	} else if nodeDeployerId == myself.Id {
+		return true
 	}
 
 	neighbor := &genericutils.Node{
