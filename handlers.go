@@ -575,31 +575,42 @@ func writeMyselfToAlternatives(alternativesFilename string) {
 	for {
 		f, err := os.OpenFile(alternativesFilename, os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
-			panic(err)
+			log.Error(err)
+			<-ticker.C
+			continue
 		}
 
 		bytes, err := ioutil.ReadFile(alternativesFilename)
 		if err != nil {
-			panic(err)
+			log.Error(err)
+			<-ticker.C
+			continue
 		}
 
 		hostname, err := os.Hostname()
 		if err != nil {
-			panic(err)
+			log.Error(err)
+			<-ticker.C
+			continue
 		}
 
 		alternatives := string(bytes)
 		if strings.Contains(alternatives, hostname) {
+			<-ticker.C
 			continue
 		}
 
 		if _, err = f.WriteString(hostname + "\n"); err != nil {
-			panic(err)
+			log.Error(err)
+			<-ticker.C
+			continue
 		}
 
 		err = f.Close()
 		if err != nil {
-			panic(err)
+			log.Error(err)
+			<-ticker.C
+			continue
 		}
 
 		<-ticker.C
@@ -620,8 +631,8 @@ func loadAlternativesPeriodically(alternativesFilename string) {
 
 		f, err := os.OpenFile(alternativesFilename, os.O_RDONLY, os.ModePerm)
 		if err != nil {
-			log.Fatalf("error opening file %s: %s", alternativesFilename, err)
-			return
+			log.Errorf("error opening file %s: %s", alternativesFilename, err)
+			continue
 		}
 
 		rd := bufio.NewReader(f)
@@ -632,9 +643,8 @@ func loadAlternativesPeriodically(alternativesFilename string) {
 				if err == io.EOF {
 					break
 				}
-
-				log.Fatalf("read file line error: %v", err)
-				return
+				log.Errorf("read file line error: %v", err)
+				break
 			}
 
 			if addr == hostname {
@@ -645,9 +655,13 @@ func loadAlternativesPeriodically(alternativesFilename string) {
 
 		}
 
+		if err != nil {
+			continue
+		}
+
 		err = f.Close()
 		if err != nil {
-			panic(err)
+			log.Error(err)
 		}
 	}
 }
