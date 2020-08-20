@@ -568,11 +568,6 @@ func simulateAlternatives() {
 		panic(err)
 	}
 
-	err = f.Close()
-	if err != nil {
-		panic(err)
-	}
-
 	hostname, err := os.Hostname()
 	if err != nil {
 		panic(err)
@@ -581,6 +576,8 @@ func simulateAlternatives() {
 	if _, err = f.WriteString(hostname + "\n"); err != nil {
 		panic(err)
 	}
+
+	defer f.Close()
 
 	go loadAlternativesPeriodically(alternativesFilename)
 }
