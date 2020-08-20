@@ -349,7 +349,7 @@ func extendDeployment(deploymentId, nodeAddr string, grandChild *genericutils.No
 
 	log.Debugf("extending deployment %s to %s", deploymentId, childId)
 
-	req := http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetDeploymentPath(deploymentId), dto)
+	req := http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetDeploymentsPath(), dto)
 	status, _ := http_utils.DoRequest(httpClient, req, nil)
 	if status == http.StatusConflict {
 		if grandChild != nil {
