@@ -600,6 +600,17 @@ func loadAlternativesPeriodically(alternativesFilename string) {
 		sc := bufio.NewScanner(f)
 		for sc.Scan() {
 			addr := sc.Text()
+
+			var hostname string
+			hostname, err = os.Hostname()
+			if err != nil {
+				panic(err)
+			}
+
+			if addr == hostname {
+				continue
+			}
+
 			onNodeUp(addr)
 		}
 
