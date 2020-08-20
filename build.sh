@@ -4,4 +4,5 @@ set -e
 
 env CGO_ENABLED=0 GOOS=linux go build -o deployer .
 docker build -t brunoanjos/deployer:latest .
-echo "" > alternatives.txt
+rm alternatives.txt
+touch alternatives
