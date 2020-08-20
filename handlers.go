@@ -75,7 +75,8 @@ func init() {
 
 	timer = time.NewTimer(sendAlternativesTimeout * time.Second)
 
-	go loadAlternatives()
+	simulateAlternatives()
+
 	go sendAlternativesPeriodically()
 	go checkParentHeartbeatsPeriodically()
 }
@@ -541,6 +542,11 @@ func addNode(nodeDeployerId, addr string) bool {
 		return true
 	}
 
+	_, ok := myAlternatives.Load(nodeDeployerId)
+	if ok {
+		return true
+	}
+
 	log.Debugf("added node %s", nodeDeployerId)
 
 	neighbor := &genericutils.Node{
@@ -552,34 +558,60 @@ func addNode(nodeDeployerId, addr string) bool {
 	return true
 }
 
-func loadAlternatives() {
-	time.Sleep(120 * time.Second)
-
+func simulateAlternatives() {
 	const (
 		alternativesFilename = "alternatives.txt"
 	)
 
-	f, err := os.OpenFile(alternativesFilename, os.O_RDONLY, os.ModePerm)
+	f, err := os.OpenFile(alternativesFilename, os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
-		log.Fatalf("error opening file %s: %s", alternativesFilename, err)
-		return
+		panic(err)
 	}
-	defer func() {
+
+	err = f.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err = f.WriteString(hostname + "\n"); err != nil {
+		panic(err)
+	}
+
+	go loadAlternativesPeriodically(alternativesFilename)
+}
+
+func loadAlternativesPeriodically(alternativesFilename string) {
+	ticker := time.NewTicker(10 * time.Second)
+
+	for {
+		<-ticker.C
+
+		f, err := os.OpenFile(alternativesFilename, os.O_RDONLY, os.ModePerm)
+		if err != nil {
+			log.Fatalf("error opening file %s: %s", alternativesFilename, err)
+			return
+		}
+
+		sc := bufio.NewScanner(f)
+		for sc.Scan() {
+			addr := sc.Text()
+			onNodeUp(addr)
+		}
+
+		if err = sc.Err(); err != nil {
+			log.Fatalf("scan file error: %v", err)
+			return
+		}
+
 		err = f.Close()
 		if err != nil {
 			panic(err)
 		}
-	}()
-
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		addr := sc.Text()
-		onNodeUp(addr)
-	}
-
-	if err = sc.Err(); err != nil {
-		log.Fatalf("scan file error: %v", err)
-		return
 	}
 }
 
