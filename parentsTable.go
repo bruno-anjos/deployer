@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	alive = 1
+	alive     = 1
 	suspected = 0
 )
 
@@ -36,6 +36,7 @@ func (t *ParentsTable) AddParent(parent *generic_utils.Node) {
 	parentEntry := &ParentsEntry{
 		Parent:           parent,
 		NumOfDeployments: 1,
+		IsUp:             alive,
 	}
 
 	t.parentEntries.Store(parent.Id, parentEntry)
