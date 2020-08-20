@@ -20,6 +20,9 @@ const (
 	SetAlternativesPath = "/alternatives/%s"
 
 	DeploymentQualityPath = "/deployments/%s/quality"
+	DeadChildPath         = "/deployments/%s/deadchild/%s"
+	TakeChildPath         = "/deployments/%s/child"
+	IAmYourParentPath     = "/deployments/%s/parent"
 
 	// scheduler
 	DeploymentInstanceAlivePath = "/deployments/%s/%s/alive"
@@ -43,6 +46,14 @@ func GetDeploymentPath(deploymentId string) string {
 	return PrefixPath + fmt.Sprintf(DeploymentPath, deploymentId)
 }
 
+func GetTakeChildPath(deploymentId string) string {
+	return PrefixPath + fmt.Sprintf(TakeChildPath, deploymentId)
+}
+
+func GetImYourParentPath(deploymentId string) string {
+	return PrefixPath + fmt.Sprintf(IAmYourParentPath, deploymentId)
+}
+
 func GetAddNodePath() string {
 	return PrefixPath + AddNodePath
 }
@@ -53,6 +64,10 @@ func GetWasAddedPath(myself string) string {
 
 func GetDeploymentQualityPath(deploymentId string) string {
 	return PrefixPath + fmt.Sprintf(DeploymentQualityPath, deploymentId)
+}
+
+func GetDeadChildPath(deploymentId, deadChildId string) string {
+	return PrefixPath + fmt.Sprintf(DeadChildPath, deploymentId, deadChildId)
 }
 
 func GetDeploymentInstancePath(deploymentId, instanceId string) string {

@@ -43,7 +43,9 @@ var (
 	myAlternatives       sync.Map
 	nodeAlternatives     map[string][]*genericutils.Node
 	nodeAlternativesLock sync.RWMutex
-	hierarchyTable       *HierarchyTable
+
+	hierarchyTable *HierarchyTable
+	parentsTable   *ParentsTable
 
 	children sync.Map
 
@@ -66,12 +68,14 @@ func init() {
 	nodeAlternativesLock = sync.RWMutex{}
 	hierarchyTable = NewHierarchyTable()
 
+	parentsTable = NewParentsTable()
 	children = sync.Map{}
 
 	timer = time.NewTimer(sendAlternativesTimeout * time.Second)
 
 	go loadAlternatives()
 	go sendAlternativesPeriodically()
+	go checkParentHeartbeatsPeriodically()
 }
 
 func qualityNotAssuredHandler(w http.ResponseWriter, r *http.Request) {
@@ -83,14 +87,17 @@ func qualityNotAssuredHandler(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	nodeAddr := getNodeCloserTo(location, maxHopsToLookFor)
+	success := false
+	for !success {
+		nodeAddr := getNodeCloserTo(location, maxHopsToLookFor)
 
-	if nodeAddr == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+		if nodeAddr == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		success = extendDeployment(deploymentId, nodeAddr, nil)
 	}
-
-	extendDeployment(deploymentId, nodeAddr)
 }
 
 func getDeploymentsHandler(w http.ResponseWriter, _ *http.Request) {
@@ -120,16 +127,38 @@ func registerDeploymentHandler(_ http.ResponseWriter, r *http.Request) {
 
 	preprocessMessage(&deploymentDTO, addrFrom)
 
-	deployment := deploymentYAMLToDeployment(&deploymentYAML, deploymentDTO.Static)
-
 	hierarchyTable.AddDeployment(&deploymentDTO)
+	if deploymentDTO.Parent != nil {
+		parent := deploymentDTO.Parent
+		ok := parentsTable.HasParent(parent.Id)
+		if !ok {
+			parentsTable.AddParent(parent)
+		}
+
+		grandparent := deploymentDTO.Grandparent
+		if grandparent != nil {
+
+		}
+	}
+
+	deployment := deploymentYAMLToDeployment(&deploymentYAML, deploymentDTO.Static)
 
 	go addDeploymentAsync(deployment, deploymentDTO.DeploymentId)
 }
 
 func deleteDeploymentHandler(_ http.ResponseWriter, r *http.Request) {
 	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
+
+	parent := hierarchyTable.GetParent(deploymentId)
+	if parent != nil {
+		isZero := parentsTable.DecreaseParentCount(parent.Id)
+		if isZero {
+
+		}
+	}
+
 	hierarchyTable.RemoveDeployment(deploymentId)
+
 	go deleteDeploymentAsync(deploymentId)
 }
 
@@ -161,7 +190,7 @@ func setAlternativesHandler(_ http.ResponseWriter, r *http.Request) {
 	deployerId := http_utils.ExtractPathVar(r, DeployerIdPathVar)
 
 	alternatives := new([]*genericutils.Node)
-	err := json.NewDecoder(r.Body).Decode(&alternatives)
+	err := json.NewDecoder(r.Body).Decode(alternatives)
 	if err != nil {
 		panic(err)
 	}
@@ -172,45 +201,154 @@ func setAlternativesHandler(_ http.ResponseWriter, r *http.Request) {
 	nodeAlternatives[deployerId] = *alternatives
 }
 
-func extendDeployment(deploymentId, nodeAddr string) (success bool) {
+func deadChildHandler(_ http.ResponseWriter, r *http.Request) {
+	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
+	deadChildId := http_utils.ExtractPathVar(r, DeployerIdPathVar)
+
+	grandchild := &genericutils.Node{}
+	err := json.NewDecoder(r.Body).Decode(grandchild)
+	if err != nil {
+		panic(err)
+	}
+
+	hierarchyTable.RemoveChild(deploymentId, deadChildId)
+
+	var (
+		success      bool
+		newChildAddr string
+	)
+	for !success {
+		newChildAddr = getNodeCloserTo("", 0)
+		success = extendDeployment(deploymentId, newChildAddr, grandchild)
+	}
+
+	newChildId := getDeployerIdFromAddr(newChildAddr)
+	hierarchyTable.AddChild(deploymentId, &genericutils.Node{
+		Id:   newChildId,
+		Addr: newChildAddr,
+	})
+}
+
+func takeChildHandler(w http.ResponseWriter, r *http.Request) {
+	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
+
+	child := &genericutils.Node{}
+	err := json.NewDecoder(r.Body).Decode(child)
+	if err != nil {
+		panic(err)
+	}
+
+	req := http_utils.BuildRequest(http.MethodPost, child.Addr, api.GetImYourParentPath(deploymentId), myself)
+	status, _ := http_utils.DoRequest(httpClient, req, nil)
+	if status != http.StatusOK {
+		log.Errorf("got status %d while telling %s that im his parent", status, child.Id)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func iAmYourParentHandler(_ http.ResponseWriter, r *http.Request) {
+	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
+
+	parent := &genericutils.Node{}
+	err := json.NewDecoder(r.Body).Decode(parent)
+	if err != nil {
+		panic(err)
+	}
+
+	hierarchyTable.SetDeploymentParent(deploymentId, parent)
+}
+
+func checkParentHeartbeatsPeriodically() {
+	ticker := time.NewTicker(30 * time.Second)
+	for {
+		<-ticker.C
+		deadParents := parentsTable.CheckDeadParents()
+		log.Debugf("dead parents: %+v", deadParents)
+		for _, deadParent := range deadParents {
+			renegotiateParent(deadParent)
+		}
+	}
+}
+
+func renegotiateParent(deadParent *genericutils.Node) {
+	deploymentIds := hierarchyTable.GetDeploymentsWithParent(deadParent.Id)
+
+	for _, deploymentId := range deploymentIds {
+		grandparent := hierarchyTable.GetGrandparent(deploymentId)
+		if grandparent == nil {
+			// TODO fallback
+			continue
+		}
+
+		newParentChan := hierarchyTable.SetDeploymentAsOrphan(deploymentId)
+
+		req := http_utils.BuildRequest(http.MethodPost, grandparent.Addr,
+			api.GetDeadChildPath(deploymentId, deadParent.Id), myself)
+		status, _ := http_utils.DoRequest(httpClient, req, nil)
+		if status != http.StatusOK {
+			log.Errorf("got status %d while renegotiating parent %s with %s for deployment %s", status,
+				deadParent, grandparent.Id, deploymentId)
+			continue
+		}
+
+		go waitForNewDeploymentParent(deploymentId, newParentChan)
+	}
+}
+
+func waitForNewDeploymentParent(deploymentId string, newParentChan <-chan string) {
+	waitingTimer := time.NewTimer(30 * time.Second)
+
+	select {
+	case <-waitingTimer.C:
+	// TODO fallback
+	case newParentId := <-newParentChan:
+		log.Debugf("got new parent %s for deployment %s", newParentId, deploymentId)
+		return
+	}
+}
+
+func extendDeployment(deploymentId, nodeAddr string, grandChild *genericutils.Node) bool {
 	dto, ok := hierarchyTable.DeploymentToDTO(deploymentId)
 	if !ok {
-		success = false
 		log.Errorf("hierarchy table does not contain deployment %s", deploymentId)
-		return
+		return false
 	}
 
-	childGrandparent, ok := hierarchyTable.GetParent(deploymentId)
-	if !ok {
-		success = false
-		log.Errorf("hierarchy table does not contain deployment %s", deploymentId)
-		return
-	}
-
+	childGrandparent := hierarchyTable.GetParent(deploymentId)
 	dto.Grandparent = childGrandparent
 	dto.Parent = myself
 
 	deployerHostPort := nodeAddr + ":" + strconv.Itoa(api.Port)
-
-	req := http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetDeploymentPath(deploymentId), dto)
-	status, _ := http_utils.DoRequest(httpClient, req, nil)
-	if status != http.StatusOK {
-		log.Errorf("got %d while extending deployment %s to %s", status, deploymentId, nodeAddr)
-		success = false
-		return
-	}
 
 	childId := getDeployerIdFromAddr(nodeAddr)
 	child := &genericutils.Node{
 		Id:   childId,
 		Addr: nodeAddr,
 	}
-	hierarchyTable.SetChild(deploymentId, child)
+
+	req := http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetDeploymentPath(deploymentId), dto)
+	status, _ := http_utils.DoRequest(httpClient, req, nil)
+	if status == http.StatusConflict {
+		if grandChild != nil {
+			req = http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetTakeChildPath(deploymentId),
+				grandChild)
+			status, _ = http_utils.DoRequest(httpClient, req, nil)
+			if status != http.StatusOK {
+				log.Errorf("got status %d while attempting to tell %s to take %s as child", status, childId,
+					grandChild.Id)
+				return false
+			}
+		}
+	} else if status != http.StatusOK {
+		log.Errorf("got %d while extending deployment %s to %s", status, deploymentId, nodeAddr)
+		return false
+	}
+
+	hierarchyTable.AddChild(deploymentId, child)
 	children.Store(childId, child)
 
-	success = true
-
-	return
+	return true
 }
 
 // TODO function simulation lower API

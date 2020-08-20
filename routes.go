@@ -19,6 +19,9 @@ const (
 	wasAddedName                = "WAS_ADDED"
 	setAlternativesName         = "SET_ALTERNATIVES"
 	qualityNotAssuredName       = "QUALITY_NOT_ASSURED"
+	deadChildName               = "DEAD_CHILD"
+	takeChildName               = "TAKE_CHILD"
+	iAmYourParentName           = "I_AM_YOUR_PARENT"
 
 	// scheduler
 	heartbeatServiceInstanceName         = "HEARTBEAT_SERVICE_INSTANCE"
@@ -44,6 +47,9 @@ var (
 	whoAreYouRoute         = api.WhoAreYouPath
 	setAlternativesRoute   = fmt.Sprintf(api.SetAlternativesPath, _deployerIdPathVarFormatted)
 	deploymentQualityRoute = fmt.Sprintf(api.DeploymentQualityPath, _deploymentIdPathVarFormatted)
+	deadChildRoute         = fmt.Sprintf(api.DeadChildPath, _deploymentIdPathVarFormatted, _deployerIdPathVarFormatted)
+	takeChildRoute         = fmt.Sprintf(api.TakeChildPath, _deploymentIdPathVarFormatted)
+	iAmYourParentRoute     = fmt.Sprintf(api.IAmYourParentPath, _deploymentIdPathVarFormatted)
 
 	// scheduler
 	deploymentInstanceAliveRoute = fmt.Sprintf(api.DeploymentInstanceAlivePath, _deploymentIdPathVarFormatted,
@@ -128,5 +134,26 @@ var routes = []http_utils.Route{
 		Method:      http.MethodPost,
 		Pattern:     deploymentQualityRoute,
 		HandlerFunc: qualityNotAssuredHandler,
+	},
+
+	{
+		Name:        deadChildName,
+		Method:      http.MethodPost,
+		Pattern:     deadChildRoute,
+		HandlerFunc: deadChildHandler,
+	},
+
+	{
+		Name:        takeChildName,
+		Method:      http.MethodPost,
+		Pattern:     takeChildRoute,
+		HandlerFunc: takeChildHandler,
+	},
+
+	{
+		Name:        iAmYourParentName,
+		Method:      http.MethodPost,
+		Pattern:     iAmYourParentRoute,
+		HandlerFunc: iAmYourParentHandler,
 	},
 }
