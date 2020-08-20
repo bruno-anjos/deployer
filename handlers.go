@@ -381,7 +381,7 @@ func addNode(nodeDeployerId, addr string) bool {
 }
 
 func loadAlternatives() {
-	time.Sleep(30 * time.Second)
+	time.Sleep(120 * time.Second)
 
 	const (
 		alternativesFilename = "alternatives.txt"
