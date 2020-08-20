@@ -23,7 +23,7 @@ type (
 		parentEntries sync.Map
 	}
 
-	typeParentEntriesMapValue = ParentsEntry
+	typeParentEntriesMapValue = *ParentsEntry
 )
 
 func NewParentsTable() *ParentsTable {
