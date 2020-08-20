@@ -10,20 +10,26 @@ import (
 
 // Route names
 const (
-	getDeploymentsName             = "GET_DEPLOYMENTS"
-	registerDeploymentName         = "REGISTER_DEPLOYMENT"
-	registerDeploymentInstanceName = "REGISTER_DEPLOYMENT_INSTANCE"
-	deleteDeploymentName           = "DELETE_DEPLOYMENT"
-	whoAreYouName                  = "WHO_ARE_YOU"
-	addNodeName                    = "ADD_NODE"
-	wasAddedName                   = "WAS_ADDED"
+	getDeploymentsName          = "GET_DEPLOYMENTS"
+	registerDeploymentName      = "REGISTER_DEPLOYMENT"
+	registerServiceInstanceName = "REGISTER_SERVICE_INSTANCE"
+	deleteDeploymentName        = "DELETE_DEPLOYMENT"
+	whoAreYouName               = "WHO_ARE_YOU"
+	addNodeName                 = "ADD_NODE"
+	wasAddedName                = "WAS_ADDED"
+	setAlternativesName         = "SET_ALTERNATIVES"
+	qualityNotAssuredName       = "QUALITY_NOT_ASSURED"
+
+	// scheduler
+	heartbeatServiceInstanceName         = "HEARTBEAT_SERVICE_INSTANCE"
+	registerHeartbeatServiceInstanceName = "REGISTER_HEARTBEAT"
 )
 
 // Path variables
 const (
 	DeploymentIdPathVar = "deploymentId"
-	InstanceIdPathVar   = "instanceId"
 	DeployerIdPathVar   = "deployerId"
+	InstanceIdPathVar   = "instanceId"
 )
 
 var (
@@ -31,13 +37,19 @@ var (
 	_instanceIdPathVarFormatted   = fmt.Sprintf(http_utils.PathVarFormat, InstanceIdPathVar)
 	_deployerIdPathVarFormatted   = fmt.Sprintf(http_utils.PathVarFormat, DeployerIdPathVar)
 
-	deploymentsRoute                = api.DeploymentsPath
-	deploymentRoute                 = fmt.Sprintf(api.DeploymentPath, _deploymentIdPathVarFormatted)
-	registerDeploymentInstanceRoute = fmt.Sprintf(api.RegisterPath, _deploymentIdPathVarFormatted,
+	deploymentsRoute       = api.DeploymentsPath
+	deploymentRoute        = fmt.Sprintf(api.DeploymentPath, _deploymentIdPathVarFormatted)
+	addNodeRoute           = api.AddNodePath
+	wasAddedRoute          = fmt.Sprintf(api.WasAddedPath, _deployerIdPathVarFormatted)
+	whoAreYouRoute         = api.WhoAreYouPath
+	setAlternativesRoute   = fmt.Sprintf(api.SetAlternativesPath, _deployerIdPathVarFormatted)
+	deploymentQualityRoute = fmt.Sprintf(api.DeploymentQualityPath, _deploymentIdPathVarFormatted)
+
+	// scheduler
+	deploymentInstanceAliveRoute = fmt.Sprintf(api.DeploymentInstanceAlivePath, _deploymentIdPathVarFormatted,
 		_instanceIdPathVarFormatted)
-	addNodeRoute   = api.AddNodePath
-	wasAddedRoute  = fmt.Sprintf(api.WasAddedPath, _deployerIdPathVarFormatted)
-	whoAreYouRoute = api.WhoAreYouPath
+	deploymentInstanceRoute = fmt.Sprintf(api.DeploymentInstancePath, _deploymentIdPathVarFormatted,
+		_instanceIdPathVarFormatted)
 )
 
 var routes = []http_utils.Route{
@@ -63,13 +75,6 @@ var routes = []http_utils.Route{
 	},
 
 	{
-		Name:        registerDeploymentInstanceName,
-		Method:      http.MethodPost,
-		Pattern:     registerDeploymentInstanceRoute,
-		HandlerFunc: registerDeploymentInstanceHandler,
-	},
-
-	{
 		Name:        addNodeName,
 		Method:      http.MethodPost,
 		Pattern:     addNodeRoute,
@@ -88,5 +93,40 @@ var routes = []http_utils.Route{
 		Method:      http.MethodGet,
 		Pattern:     whoAreYouRoute,
 		HandlerFunc: whoAreYouHandler,
+	},
+
+	{
+		Name:        setAlternativesName,
+		Method:      http.MethodPost,
+		Pattern:     setAlternativesRoute,
+		HandlerFunc: setAlternativesHandler,
+	},
+
+	{
+		Name:        heartbeatServiceInstanceName,
+		Method:      http.MethodPut,
+		Pattern:     deploymentInstanceAliveRoute,
+		HandlerFunc: heartbeatServiceInstanceHandler,
+	},
+
+	{
+		Name:        registerHeartbeatServiceInstanceName,
+		Method:      http.MethodPost,
+		Pattern:     deploymentInstanceAliveRoute,
+		HandlerFunc: registerHeartbeatServiceInstanceHandler,
+	},
+
+	{
+		Name:        registerServiceInstanceName,
+		Method:      http.MethodPost,
+		Pattern:     deploymentInstanceRoute,
+		HandlerFunc: registerServiceInstanceHandler,
+	},
+
+	{
+		Name:        qualityNotAssuredName,
+		Method:      http.MethodPost,
+		Pattern:     deploymentQualityRoute,
+		HandlerFunc: qualityNotAssuredHandler,
 	},
 }

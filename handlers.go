@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
+	"math/rand"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -21,54 +24,78 @@ import (
 )
 
 type (
-	Deployer struct {
-		DeployerId string
-		Addr       string
-	}
+	typeMyAlternativesMapValue = *genericutils.Node
 
-	DeployerCollection struct {
-		Deployers map[string]*Deployer
-		Mutex     *sync.RWMutex
-	}
+	typeChildrenMapValue = *genericutils.Node
+)
 
-	typeDeploymentsMapValue = *Deployment
+const (
+	sendAlternativesTimeout = 30
 
-	typeDeployersPerLevelMapValue = *DeployerCollection
-
-	typeDeployersMapKey   = string
-	typeDeployersMapValue = *Deployer
+	maxHopsToLookFor = 5
 )
 
 var (
-	deployerId uuid.UUID
+	myself *genericutils.Node
 
-	httpClient        *http.Client
-	deployments       sync.Map
-	deployersPerLevel sync.Map
-	deployers         sync.Map
+	httpClient *http.Client
+
+	myAlternatives       sync.Map
+	nodeAlternatives     map[string][]*genericutils.Node
+	nodeAlternativesLock sync.RWMutex
+	hierarchyTable       *HierarchyTable
+
+	children sync.Map
+
+	timer *time.Timer
 )
 
 func init() {
-	deployerId = uuid.New()
+	deployerId := uuid.New()
+	myself = &genericutils.Node{
+		Id:   deployerId.String(),
+		Addr: "",
+	}
 
 	httpClient = &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	deployments = sync.Map{}
-	deployersPerLevel = sync.Map{}
-	deployers = sync.Map{}
+
+	myAlternatives = sync.Map{}
+	nodeAlternatives = map[string][]*genericutils.Node{}
+	nodeAlternativesLock = sync.RWMutex{}
+	hierarchyTable = NewHierarchyTable()
+
+	children = sync.Map{}
+
+	timer = time.NewTimer(sendAlternativesTimeout * time.Second)
+
+	go loadAlternatives()
+	go sendAlternativesPeriodically()
+}
+
+func qualityNotAssuredHandler(w http.ResponseWriter, r *http.Request) {
+	deploymentId := http_utils.ExtractPathVar(r, DeployerIdPathVar)
+
+	location := ""
+	err := json.NewDecoder(r.Body).Decode(&location)
+	if err != nil {
+		panic(err)
+	}
+
+	nodeAddr := getNodeCloserTo(location, maxHopsToLookFor)
+
+	if nodeAddr == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	extendDeployment(deploymentId, nodeAddr)
 }
 
 func getDeploymentsHandler(w http.ResponseWriter, _ *http.Request) {
-	var deploymentsToSend []*Deployment
-
-	deployments.Range(func(key, value interface{}) bool {
-		deployment := value.(typeDeploymentsMapValue)
-		deploymentsToSend = append(deploymentsToSend, deployment)
-		return true
-	})
-
-	http_utils.SendJSONReplyOK(w, deploymentsToSend)
+	deployments := hierarchyTable.GetDeployments()
+	http_utils.SendJSONReplyOK(w, deployments)
 }
 
 func registerDeploymentHandler(_ http.ResponseWriter, r *http.Request) {
@@ -86,39 +113,38 @@ func registerDeploymentHandler(_ http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	deployment := deploymentYAMLToDeployment(&deploymentYAML, deploymentDTO.Static)
-	go addDeploymentAsync(deployment, deploymentDTO.DeploymentName)
-}
-
-func deleteDeploymentHandler(w http.ResponseWriter, r *http.Request) {
-	deploymentName := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
-
-	value, ok := deployments.Load(deploymentName)
-	if !ok {
-		w.WriteHeader(http.StatusNotFound)
-		return
+	addrFrom, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		panic(err)
 	}
 
-	deployment := value.(typeDeploymentsMapValue)
+	preprocessMessage(&deploymentDTO, addrFrom)
 
-	go deleteDeploymentAsync(deployment, deploymentName)
+	deployment := deploymentYAMLToDeployment(&deploymentYAML, deploymentDTO.Static)
+
+	hierarchyTable.AddDeployment(&deploymentDTO)
+
+	go addDeploymentAsync(deployment, deploymentDTO.DeploymentId)
+}
+
+func deleteDeploymentHandler(_ http.ResponseWriter, r *http.Request) {
+	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
+	hierarchyTable.RemoveDeployment(deploymentId)
+	go deleteDeploymentAsync(deploymentId)
 }
 
 func whoAreYouHandler(w http.ResponseWriter, _ *http.Request) {
-	http_utils.SendJSONReplyOK(w, deployerId)
+	http_utils.SendJSONReplyOK(w, myself.Id)
 }
 
-func addNodeHandler(w http.ResponseWriter, r *http.Request) {
+func addNodeHandler(_ http.ResponseWriter, r *http.Request) {
 	var nodeAddr string
 	err := json.NewDecoder(r.Body).Decode(&nodeAddr)
 	if err != nil {
 		panic(err)
 	}
 
-	if !onNodeUp(nodeAddr, 0) {
-		w.WriteHeader(http.StatusConflict)
-		return
-	}
+	onNodeUp(nodeAddr)
 }
 
 func wasAddedHandler(_ http.ResponseWriter, r *http.Request) {
@@ -128,13 +154,89 @@ func wasAddedHandler(_ http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	addNode(deployerIdWhoAddedMe, host, 0)
+	addNode(deployerIdWhoAddedMe, host)
 }
 
-func addDeploymentAsync(deployment *Deployment, deploymentName string) {
-	log.Debugf("adding deployment %s", deploymentName)
+func setAlternativesHandler(_ http.ResponseWriter, r *http.Request) {
+	deployerId := http_utils.ExtractPathVar(r, DeployerIdPathVar)
 
-	servicePath := archimedes.GetServicePath(deploymentName)
+	alternatives := new([]*genericutils.Node)
+	err := json.NewDecoder(r.Body).Decode(&alternatives)
+	if err != nil {
+		panic(err)
+	}
+
+	nodeAlternativesLock.Lock()
+	defer nodeAlternativesLock.Unlock()
+
+	nodeAlternatives[deployerId] = *alternatives
+}
+
+func extendDeployment(deploymentId, nodeAddr string) (success bool) {
+	dto, ok := hierarchyTable.DeploymentToDTO(deploymentId)
+	if !ok {
+		success = false
+		log.Errorf("hierarchy table does not contain deployment %s", deploymentId)
+		return
+	}
+
+	childGrandparent, ok := hierarchyTable.GetParent(deploymentId)
+	if !ok {
+		success = false
+		log.Errorf("hierarchy table does not contain deployment %s", deploymentId)
+		return
+	}
+
+	dto.Grandparent = childGrandparent
+	dto.Parent = myself
+
+	deployerHostPort := nodeAddr + ":" + strconv.Itoa(api.Port)
+
+	req := http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetDeploymentPath(deploymentId), dto)
+	status, _ := http_utils.DoRequest(httpClient, req, nil)
+	if status != http.StatusOK {
+		log.Errorf("got %d while extending deployment %s to %s", status, deploymentId, nodeAddr)
+		success = false
+		return
+	}
+
+	childId := getDeployerIdFromAddr(nodeAddr)
+	child := &genericutils.Node{
+		Id:   childId,
+		Addr: nodeAddr,
+	}
+	hierarchyTable.SetChild(deploymentId, child)
+	children.Store(childId, child)
+
+	success = true
+
+	return
+}
+
+// TODO function simulation lower API
+func getNodeCloserTo(location string, maxHopsToLookFor int) string {
+	var (
+		alternatives []*genericutils.Node
+	)
+
+	myAlternatives.Range(func(key, value interface{}) bool {
+		node := value.(typeMyAlternativesMapValue)
+		alternatives = append(alternatives, node)
+		return true
+	})
+
+	if len(alternatives) == 0 {
+		return ""
+	}
+
+	randIdx := rand.Intn(len(alternatives))
+	return alternatives[randIdx].Addr
+}
+
+func addDeploymentAsync(deployment *Deployment, deploymentId string) {
+	log.Debugf("adding deployment %s", deploymentId)
+
+	servicePath := archimedes.GetServicePath(deploymentId)
 
 	service := archimedes.ServiceDTO{
 		Ports: deployment.Ports,
@@ -149,7 +251,7 @@ func addDeploymentAsync(deployment *Deployment, deploymentName string) {
 	}
 
 	containerInstance := scheduler.ContainerInstanceDTO{
-		ServiceName: deploymentName,
+		ServiceName: deploymentId,
 		ImageName:   deployment.Image,
 		Ports:       deployment.Ports,
 		Static:      deployment.Static,
@@ -168,43 +270,34 @@ func addDeploymentAsync(deployment *Deployment, deploymentName string) {
 			if status != http.StatusOK {
 				log.Error("error deleting service that failed initializing")
 			}
+			hierarchyTable.RemoveDeployment(deploymentId)
 			return
 		}
-
 	}
-
-	deployments.Store(deploymentName, deployment)
 }
 
-func registerDeploymentInstanceHandler(w http.ResponseWriter, r *http.Request) {
-	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
-	instanceId := http_utils.ExtractPathVar(r, InstanceIdPathVar)
+func deleteDeploymentAsync(deploymentId string) {
+	servicePath := archimedes.GetServicePath(deploymentId)
 
-	value, ok := deployments.Load(deploymentId)
-	if !ok {
-		w.WriteHeader(http.StatusNotFound)
+	req := http_utils.BuildRequest(http.MethodGet, archimedes.DefaultHostPort, servicePath, nil)
+
+	instances := map[string]*archimedes.Instance{}
+	status, _ := http_utils.DoRequest(httpClient, req, &instances)
+	if status != http.StatusOK {
+		log.Errorf("got status %d while requesting service %s instances", status, deploymentId)
 		return
 	}
 
-	deployment := value.(typeDeploymentsMapValue)
-	deployment.Lock.Lock()
-	deployment.InstancesIds = append(deployment.InstancesIds, instanceId)
-	deployment.Lock.Unlock()
-}
-
-func deleteDeploymentAsync(deployment *Deployment, deploymentName string) {
-	servicePath := archimedes.GetServicePath(deploymentName)
-
-	req := http_utils.BuildRequest(http.MethodDelete, archimedes.DefaultHostPort, servicePath, nil)
-	status, _ := http_utils.DoRequest(httpClient, req, nil)
+	req = http_utils.BuildRequest(http.MethodDelete, archimedes.DefaultHostPort, servicePath, nil)
+	status, _ = http_utils.DoRequest(httpClient, req, nil)
 
 	if status != http.StatusOK {
 		log.Warnf("got status code %d from archimedes", status)
 		return
 	}
 
-	for _, instance := range deployment.InstancesIds {
-		instancePath := scheduler.GetInstancePath(instance)
+	for instanceId := range instances {
+		instancePath := scheduler.GetInstancePath(instanceId)
 		req = http_utils.BuildRequest(http.MethodDelete, scheduler.DefaultHostPort, instancePath, nil)
 		status, _ = http_utils.DoRequest(httpClient, req, nil)
 
@@ -243,23 +336,18 @@ func deploymentYAMLToDeployment(deploymentYAML *DeploymentYAML, static bool) *De
 	}
 
 	deployment := Deployment{
-		DeploymentName:    deploymentYAML.Spec.ServiceName,
+		DeploymentId:      deploymentYAML.Spec.ServiceName,
 		NumberOfInstances: deploymentYAML.Spec.Replicas,
 		Image:             containerSpec.Image,
 		EnvVars:           envVars,
 		Ports:             ports,
 		Static:            static,
-		InstancesIds:      []string{},
 		Lock:              &sync.RWMutex{},
 	}
 
 	log.Debugf("%+v", deployment)
 
 	return &deployment
-}
-
-func onNodeUp(addr string, level int) bool {
-	return addNode("", addr, level)
 }
 
 func getDeployerIdFromAddr(addr string) string {
@@ -278,56 +366,103 @@ func getDeployerIdFromAddr(addr string) string {
 	return nodeDeployerId
 }
 
-func addNode(nodeDeployerId, addr string, level int) bool {
-	collection := &DeployerCollection{
-		Deployers: map[string]*Deployer{},
-		Mutex:     &sync.RWMutex{},
-	}
-	value, _ := deployersPerLevel.LoadOrStore(level, collection)
-	collection = value.(typeDeployersPerLevelMapValue)
-
+func addNode(nodeDeployerId, addr string) bool {
 	if nodeDeployerId == "" {
 		nodeDeployerId = getDeployerIdFromAddr(addr)
 	}
 
-	deployer := &Deployer{
-		DeployerId: nodeDeployerId,
-		Addr:       addr,
-	}
-	collection.Mutex.Lock()
-	collection.Deployers[nodeDeployerId] = deployer
-	collection.Mutex.Unlock()
-
-	_, loaded := deployers.LoadOrStore(nodeDeployerId, deployer)
-	if loaded {
-		return false
+	neighbor := &genericutils.Node{
+		Id:   nodeDeployerId,
+		Addr: addr,
 	}
 
-	otherArchimedesAddr := addr + ":" + strconv.Itoa(archimedes.Port)
-
-	neighborDTO := archimedes.NeighborDTO{
-		Addr: otherArchimedesAddr,
-	}
-
-	req := http_utils.BuildRequest(http.MethodPost, archimedes.DefaultHostPort, archimedes.GetNeighborPath(),
-		neighborDTO)
-	status, _ := http_utils.DoRequest(httpClient, req, nil)
-
-	if status != http.StatusOK {
-		log.Fatalf("got status code %d while adding neighbor in archimedes", status)
-	}
-
-	otherDeployerAddr := addr + ":" + strconv.Itoa(api.Port)
-	req = http_utils.BuildRequest(http.MethodPost, otherDeployerAddr, api.GetWasAddedPath(deployerId.String()), nil)
-	http_utils.DoRequest(httpClient, req, nil)
-
-	if status != http.StatusOK {
-		log.Fatalf("got status code %d while alerting %s that i added him", status, otherDeployerAddr)
-	}
-
+	myAlternatives.Store(nodeDeployerId, neighbor)
 	return true
 }
 
-func onNodeDown(addr string, level int) {
+func loadAlternatives() {
+	time.Sleep(15 * time.Second)
 
+	const (
+		alternativesFilename = "alternatives.txt"
+	)
+
+	f, err := os.OpenFile(alternativesFilename, os.O_RDONLY, os.ModePerm)
+	if err != nil {
+		log.Fatalf("error opening file %s: %s", alternativesFilename, err)
+		return
+	}
+	defer func() {
+		err = f.Close()
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		addr := sc.Text()
+		onNodeUp(addr)
+	}
+
+	if err = sc.Err(); err != nil {
+		log.Fatalf("scan file error: %v", err)
+		return
+	}
+}
+
+// TODO function simulation lower API
+// Node up is only triggered for nodes that appeared one hop away
+func onNodeUp(addr string) {
+	addNode("", addr)
+	sendAlternatives()
+	timer.Reset(sendAlternativesTimeout * time.Second)
+}
+
+// TODO function simulation lower API
+// Node down is only triggered for nodes that were one hop away
+func onNodeDown(addr string) {
+	id := getDeployerIdFromAddr(addr)
+	myAlternatives.Delete(id)
+	sendAlternatives()
+	timer.Reset(sendAlternativesTimeout * time.Second)
+}
+
+func preprocessMessage(deployment *api.DeploymentDTO, addrFrom string) {
+	if deployment.Parent != nil {
+		deployment.Parent.Addr = addrFrom
+	}
+}
+
+func sendAlternativesPeriodically() {
+	for {
+		<-timer.C
+		sendAlternatives()
+		timer.Reset(sendAlternativesTimeout * time.Second)
+	}
+}
+
+func sendAlternatives() {
+	var alternatives []*genericutils.Node
+	myAlternatives.Range(func(key, value interface{}) bool {
+		neighbor := value.(typeMyAlternativesMapValue)
+		alternatives = append(alternatives, neighbor)
+		return true
+	})
+
+	children.Range(func(key, value interface{}) bool {
+		neighbor := value.(typeChildrenMapValue)
+		sendAlternativesTo(neighbor, alternatives)
+		return true
+	})
+}
+
+func sendAlternativesTo(neighbor *genericutils.Node, alternatives []*genericutils.Node) {
+	req := http_utils.BuildRequest(http.MethodPost, neighbor.Addr, api.GetSetAlternativesPath(myself.Id),
+		alternatives)
+
+	status, _ := http_utils.DoRequest(httpClient, req, nil)
+	if status != http.StatusOK {
+		log.Errorf("got status %d while sending alternatives to %s", status, neighbor.Addr)
+	}
 }

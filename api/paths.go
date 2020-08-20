@@ -11,12 +11,19 @@ const (
 
 	DeploymentsPath = "/deployments"
 	DeploymentPath  = "/deployments/%s"
-	RegisterPath    = "/deployments/%s/register/%s"
 
 	AddNodePath  = "/node"
 	WasAddedPath = "/added/%s"
 
 	WhoAreYouPath = "/who"
+
+	SetAlternativesPath = "/alternatives/%s"
+
+	DeploymentQualityPath = "/deployments/%s/quality"
+
+	// scheduler
+	DeploymentInstanceAlivePath = "/deployments/%s/%s/alive"
+	DeploymentInstancePath      = "/deployments/%s/%s"
 )
 
 const (
@@ -36,10 +43,6 @@ func GetDeploymentPath(deploymentId string) string {
 	return PrefixPath + fmt.Sprintf(DeploymentPath, deploymentId)
 }
 
-func GetRegisterDeploymentInstancePath(deploymentId, instanceId string) string {
-	return PrefixPath + fmt.Sprintf(RegisterPath, deploymentId, instanceId)
-}
-
 func GetAddNodePath() string {
 	return PrefixPath + AddNodePath
 }
@@ -48,6 +51,22 @@ func GetWasAddedPath(myself string) string {
 	return PrefixPath + fmt.Sprintf(WasAddedPath, myself)
 }
 
+func GetDeploymentQualityPath(deploymentId string) string {
+	return PrefixPath + fmt.Sprintf(DeploymentQualityPath, deploymentId)
+}
+
+func GetDeploymentInstancePath(deploymentId, instanceId string) string {
+	return PrefixPath + fmt.Sprintf(DeploymentInstancePath, deploymentId, instanceId)
+}
+
+func GetSetAlternativesPath(nodeId string) string {
+	return PrefixPath + fmt.Sprintf(SetAlternativesPath, nodeId)
+}
+
 func GetWhoAreYouPath() string {
 	return PrefixPath + WhoAreYouPath
+}
+
+func GetDeploymentInstanceAlivePath(deploymentId, instanceId string) string {
+	return PrefixPath + fmt.Sprintf(DeploymentInstanceAlivePath, deploymentId, instanceId)
 }

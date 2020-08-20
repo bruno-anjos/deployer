@@ -28,12 +28,17 @@ type DeploymentYAML struct {
 }
 
 type Deployment struct {
-	DeploymentName    string
+	DeploymentId      string
 	NumberOfInstances int
 	Image             string
 	EnvVars           []string
 	Ports             nat.PortSet
 	Static            bool
-	InstancesIds      []string
 	Lock              *sync.RWMutex
+}
+
+type PairServiceIdStatus struct {
+	ServiceId string
+	IsUp      bool
+	Mutex     *sync.Mutex
 }
