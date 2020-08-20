@@ -79,7 +79,9 @@ func init() {
 }
 
 func qualityNotAssuredHandler(w http.ResponseWriter, r *http.Request) {
-	deploymentId := http_utils.ExtractPathVar(r, DeployerIdPathVar)
+	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
+
+	log.Debugf("quality not assured for %s", deploymentId)
 
 	location := ""
 	err := json.NewDecoder(r.Body).Decode(&location)
@@ -211,6 +213,8 @@ func deadChildHandler(_ http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
+	log.Debugf("grandchild %s reported deployment %s from %s as dead", grandchild.Id, deploymentId, deadChildId)
+
 	hierarchyTable.RemoveChild(deploymentId, deadChildId)
 
 	var (
@@ -238,6 +242,8 @@ func takeChildHandler(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
+	log.Debugf("told to accept %s as child for deployment %s", child.Id, deploymentId)
+
 	req := http_utils.BuildRequest(http.MethodPost, child.Addr, api.GetImYourParentPath(deploymentId), myself)
 	status, _ := http_utils.DoRequest(httpClient, req, nil)
 	if status != http.StatusOK {
@@ -252,6 +258,13 @@ func iAmYourParentHandler(_ http.ResponseWriter, r *http.Request) {
 
 	parent := &genericutils.Node{}
 	err := json.NewDecoder(r.Body).Decode(parent)
+	if err != nil {
+		panic(err)
+	}
+
+	log.Debugf("told to accept %s as parent for deployment %s", parent.Id, deploymentId)
+
+	parent.Addr, _, err = net.SplitHostPort(r.Host)
 	if err != nil {
 		panic(err)
 	}
@@ -278,11 +291,12 @@ func checkParentHeartbeatsPeriodically() {
 func renegotiateParent(deadParent *genericutils.Node) {
 	deploymentIds := hierarchyTable.GetDeploymentsWithParent(deadParent.Id)
 
+	log.Debugf("renegotiating deployments %+v with parent %s", deploymentIds, deadParent.Id)
+
 	for _, deploymentId := range deploymentIds {
 		grandparent := hierarchyTable.GetGrandparent(deploymentId)
 		if grandparent == nil {
-			// TODO fallback
-			continue
+			panic("TODO fallback")
 		}
 
 		newParentChan := hierarchyTable.SetDeploymentAsOrphan(deploymentId)
@@ -305,7 +319,7 @@ func waitForNewDeploymentParent(deploymentId string, newParentChan <-chan string
 
 	select {
 	case <-waitingTimer.C:
-	// TODO fallback
+		panic("TODO fallback")
 	case newParentId := <-newParentChan:
 		log.Debugf("got new parent %s for deployment %s", newParentId, deploymentId)
 		return
@@ -331,10 +345,14 @@ func extendDeployment(deploymentId, nodeAddr string, grandChild *genericutils.No
 		Addr: nodeAddr,
 	}
 
+	log.Debugf("extending deployment %s to %s", deploymentId, childId)
+
 	req := http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetDeploymentPath(deploymentId), dto)
 	status, _ := http_utils.DoRequest(httpClient, req, nil)
 	if status == http.StatusConflict {
 		if grandChild != nil {
+			log.Debugf("child %s already has %s, telling it to take grandchild %s", childId, deploymentId,
+				grandChild.Id)
 			req = http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetTakeChildPath(deploymentId),
 				grandChild)
 			status, _ = http_utils.DoRequest(httpClient, req, nil)
@@ -343,12 +361,16 @@ func extendDeployment(deploymentId, nodeAddr string, grandChild *genericutils.No
 					grandChild.Id)
 				return false
 			}
+		} else {
+			log.Debugf("could not extend deployment %s to %s because of conflict", deploymentId, childId)
+			return false
 		}
 	} else if status != http.StatusOK {
 		log.Errorf("got %d while extending deployment %s to %s", status, deploymentId, nodeAddr)
 		return false
 	}
 
+	log.Debugf("extended %s to %s sucessfully", deploymentId, childId)
 	hierarchyTable.AddChild(deploymentId, child)
 	children.Store(childId, child)
 
