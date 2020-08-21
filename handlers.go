@@ -601,7 +601,8 @@ func loadAlternativesPeriodically() {
 
 		files, err := ioutil.ReadDir(alternativesDir)
 		if err != nil {
-			log.Fatal(err)
+			log.Error(err)
+			continue
 		}
 
 		for _, f := range files {
