@@ -5,6 +5,7 @@ import (
 
 	"github.com/bruno-anjos/deployer/api"
 	genericutils "github.com/bruno-anjos/solution-utils"
+	log "github.com/sirupsen/logrus"
 )
 
 type (
@@ -122,6 +123,7 @@ func (t *HierarchyTable) SetDeploymentAsOrphan(deploymentId string) <-chan strin
 	entry := value.(typeHierarchyEntriesMapValue)
 	entry.IsOrphan = true
 
+	log.Debugf("setting %s as orphan", deploymentId)
 	return make(chan string)
 }
 

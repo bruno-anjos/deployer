@@ -241,6 +241,7 @@ func takeChildHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hierarchyTable.AddChild(deploymentId, child)
+	children.Store(child.Id, child)
 }
 
 func iAmYourParentHandler(_ http.ResponseWriter, r *http.Request) {
@@ -255,7 +256,6 @@ func iAmYourParentHandler(_ http.ResponseWriter, r *http.Request) {
 	log.Debugf("told to accept %s as parent for deployment %s", parent.Id, deploymentId)
 
 	hierarchyTable.SetDeploymentParent(deploymentId, parent)
-
 }
 
 func getHierarchyTableHandler(w http.ResponseWriter, _ *http.Request) {
@@ -336,6 +336,8 @@ func renegotiateParent(deadParent *genericutils.Node) {
 
 func waitForNewDeploymentParent(deploymentId string, newParentChan <-chan string) {
 	waitingTimer := time.NewTimer(waitForNewParentTimeout * time.Second)
+
+	log.Debugf("waiting new parent for %s", deploymentId)
 
 	select {
 	case <-waitingTimer.C:
