@@ -384,15 +384,17 @@ func extendDeployment(deploymentId, nodeAddr string, grandChild *genericutils.No
 		return false
 	}
 
-	log.Debugf("original parent before: %v", hierarchyTable.GetParent(deploymentId))
-	log.Debugf("current parent before: %v", dto.Parent)
+	log.Debugf("original parent before: %+v", hierarchyTable.GetParent(deploymentId))
+	log.Debugf("current parent before: %+v", dto.Parent)
 
 	childGrandparent := hierarchyTable.GetParent(deploymentId)
 	dto.Grandparent = childGrandparent
 	dto.Parent = myself
 
-	log.Debugf("original parent after: %v", hierarchyTable.GetParent(deploymentId))
-	log.Debugf("current parent after: %v", dto.Parent)
+	log.Debugf("original parent after: %+v", hierarchyTable.GetParent(deploymentId))
+	log.Debugf("current parent after: %+v", dto.Parent)
+
+	log.Debugf("myself: %+v", myself)
 
 	deployerHostPort := addPortToAddr(nodeAddr)
 
