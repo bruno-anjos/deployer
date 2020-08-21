@@ -59,6 +59,10 @@ func (t *ParentsTable) DecreaseParentCount(parentId string) (isZero bool) {
 	return
 }
 
+func (t *ParentsTable) RemoveParent(parentId string) {
+	t.parentEntries.Delete(parentId)
+}
+
 func (t *ParentsTable) SetParentUp(parentId string) {
 	value, ok := t.parentEntries.Load(parentId)
 	if !ok {
