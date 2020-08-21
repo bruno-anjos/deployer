@@ -38,9 +38,9 @@ const (
 
 	alternativesDir = "/alternatives/"
 
-	checkParentsTimeout  = 30
-	heartbeatTimeout     = 10
-	extendAttemptTimeout = 10
+	checkParentsTimeout     = 30
+	heartbeatTimeout        = 10
+	extendAttemptTimeout    = 10
 	waitForNewParentTimeout = 60
 )
 
@@ -402,24 +402,22 @@ func extendDeployment(deploymentId, childAddr string, grandChild *genericutils.N
 	req := http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetDeploymentsPath(), dto)
 	status, _ := http_utils.DoRequest(httpClient, req, nil)
 	if status == http.StatusConflict {
-		if grandChild != nil {
-			log.Debugf("child %s already has %s, telling it to take grandchild %s", childId, deploymentId,
-				grandChild.Id)
-			req = http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetTakeChildPath(deploymentId),
-				grandChild)
-			status, _ = http_utils.DoRequest(httpClient, req, nil)
-			if status != http.StatusOK {
-				log.Errorf("got status %d while attempting to tell %s to take %s as child", status, childId,
-					grandChild.Id)
-				return false
-			}
-		} else {
-			log.Debugf("could not extend deployment %s to %s because of conflict", deploymentId, childId)
-			return false
-		}
+		log.Debugf("deployment %s is already present in %s", deploymentId, childId)
 	} else if status != http.StatusOK {
 		log.Errorf("got %d while extending deployment %s to %s", status, deploymentId, childAddr)
 		return false
+	}
+
+	if grandChild != nil {
+		log.Debugf("telling %s to take grandchild %s for deployment %s", childId, grandChild.Id, deploymentId)
+		req = http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetTakeChildPath(deploymentId),
+			grandChild)
+		status, _ = http_utils.DoRequest(httpClient, req, nil)
+		if status != http.StatusOK {
+			log.Errorf("got status %d while attempting to tell %s to take %s as child", status, childId,
+				grandChild.Id)
+			return false
+		}
 	}
 
 	log.Debugf("extended %s to %s sucessfully", deploymentId, childId)
