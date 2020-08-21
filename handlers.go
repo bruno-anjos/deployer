@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -243,7 +244,10 @@ func deadChildHandler(_ http.ResponseWriter, r *http.Request) {
 		success = extendDeployment(deploymentId, newChildAddr, grandchild)
 	}
 
-	newChildId := getDeployerIdFromAddr(newChildAddr)
+	newChildId, err := getDeployerIdFromAddr(newChildAddr)
+	if err != nil {
+		return
+	}
 	hierarchyTable.AddChild(deploymentId, &genericutils.Node{
 		Id:   newChildId,
 		Addr: newChildAddr,
@@ -385,7 +389,11 @@ func extendDeployment(deploymentId, nodeAddr string, grandChild *genericutils.No
 
 	deployerHostPort := addPortToAddr(nodeAddr)
 
-	childId := getDeployerIdFromAddr(nodeAddr)
+	childId, err := getDeployerIdFromAddr(nodeAddr)
+	if err != nil {
+		return false
+	}
+
 	child := &genericutils.Node{
 		Id:   childId,
 		Addr: nodeAddr,
@@ -560,7 +568,7 @@ func deploymentYAMLToDeployment(deploymentYAML *DeploymentYAML, static bool) *De
 	return &deployment
 }
 
-func getDeployerIdFromAddr(addr string) string {
+func getDeployerIdFromAddr(addr string) (string, error) {
 	var nodeDeployerId string
 
 	otherDeployerAddr := addPortToAddr(addr)
@@ -571,15 +579,20 @@ func getDeployerIdFromAddr(addr string) string {
 	log.Debugf("other deployer id is %s", nodeDeployerId)
 
 	if status != http.StatusOK {
-		log.Fatalf("got status code %d from other deployer", status)
+		log.Error("got status code %d from other deployer", status)
+		return "", errors.New("got status code %d from other deployer")
 	}
 
-	return nodeDeployerId
+	return nodeDeployerId, nil
 }
 
 func addNode(nodeDeployerId, addr string) bool {
 	if nodeDeployerId == "" {
-		nodeDeployerId = getDeployerIdFromAddr(addr)
+		var err error
+		nodeDeployerId, err = getDeployerIdFromAddr(addr)
+		if err != nil {
+			return false
+		}
 	}
 
 	if nodeDeployerId == myself.Id {
@@ -657,7 +670,11 @@ func onNodeUp(addr string) {
 // TODO function simulation lower API
 // Node down is only triggered for nodes that were one hop away
 func onNodeDown(addr string) {
-	id := getDeployerIdFromAddr(addr)
+	id, err := getDeployerIdFromAddr(addr)
+	if err != nil {
+		return
+	}
+	
 	myAlternatives.Delete(id)
 	sendAlternatives()
 	timer.Reset(sendAlternativesTimeout * time.Second)
