@@ -30,21 +30,25 @@ type (
 	typeSuspectedChildMapKey = string
 )
 
+// Timeouts
 const (
 	sendAlternativesTimeout = 30
-
-	maxHopsToLookFor = 5
-
-	alternativesDir = "/alternatives/"
-
 	checkParentsTimeout     = 30
 	heartbeatTimeout        = 10
 	extendAttemptTimeout    = 10
 	waitForNewParentTimeout = 60
 )
 
+const (
+	alternativesDir  = "/alternatives/"
+	fallbackFilename = "fallback.txt"
+	maxHopsToLookFor = 5
+)
+
 var (
 	hostname string
+	fallback string
+	location string
 	myself   *genericutils.Node
 
 	httpClient *http.Client
@@ -89,6 +93,10 @@ func init() {
 	children = sync.Map{}
 
 	timer = time.NewTimer(sendAlternativesTimeout * time.Second)
+
+	// TODO change this for location from lower API
+	location = ""
+	fallback = loadFallbackHostname(fallbackFilename)
 
 	simulateAlternatives()
 
