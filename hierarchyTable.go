@@ -5,7 +5,6 @@ import (
 
 	"github.com/bruno-anjos/deployer/api"
 	genericutils "github.com/bruno-anjos/solution-utils"
-	log "github.com/sirupsen/logrus"
 )
 
 type (
@@ -109,6 +108,7 @@ func (t *HierarchyTable) SetDeploymentParent(deploymentId string, parent *generi
 	if entry.NewParentChan != nil {
 		entry.NewParentChan <- parent.Id
 		close(entry.NewParentChan)
+		entry.NewParentChan = nil
 	}
 
 	entry.IsOrphan = false
@@ -122,9 +122,10 @@ func (t *HierarchyTable) SetDeploymentAsOrphan(deploymentId string) <-chan strin
 
 	entry := value.(typeHierarchyEntriesMapValue)
 	entry.IsOrphan = true
+	newParentChan := make(chan string)
+	entry.NewParentChan = newParentChan
 
-	log.Debugf("setting %s as orphan", deploymentId)
-	return make(chan string)
+	return newParentChan
 }
 
 func (t *HierarchyTable) AddChild(deploymentId string, child *genericutils.Node) bool {
