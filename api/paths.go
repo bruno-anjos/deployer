@@ -23,7 +23,8 @@ const (
 	DeadChildPath         = "/deployments/%s/deadchild/%s"
 	TakeChildPath         = "/deployments/%s/child"
 	IAmYourParentPath     = "/deployments/%s/parent"
-	GetHierarchyTablePath     = "/table"
+	GetHierarchyTablePath = "/table"
+	ParentAlivePath       = "/parent/%s/up"
 
 	// scheduler
 	DeploymentInstanceAlivePath = "/deployments/%s/%s/alive"
@@ -61,6 +62,10 @@ func GetAddNodePath() string {
 
 func GetWasAddedPath(myself string) string {
 	return PrefixPath + fmt.Sprintf(WasAddedPath, myself)
+}
+
+func GetParentAlivePath(parentId string) string {
+	return PrefixPath + fmt.Sprintf(ParentAlivePath, parentId)
 }
 
 func GetDeploymentQualityPath(deploymentId string) string {

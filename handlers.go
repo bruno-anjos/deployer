@@ -36,6 +36,9 @@ const (
 	maxHopsToLookFor = 5
 
 	alternativesDir = "/alternatives/"
+
+	checkParentsTimeout = 30
+	heartbeatTimeout    = 10
 )
 
 var (
@@ -87,6 +90,7 @@ func init() {
 
 	simulateAlternatives()
 
+	go sendHeartbeatsPeriodically()
 	go sendAlternativesPeriodically()
 	go checkParentHeartbeatsPeriodically()
 }
@@ -289,8 +293,32 @@ func getHierarchyTableHandler(w http.ResponseWriter, _ *http.Request) {
 	http_utils.SendJSONReplyOK(w, hierarchyTable.ToDTO())
 }
 
+func parentAliveHandler(_ http.ResponseWriter, r *http.Request) {
+	parentId := http_utils.ExtractPathVar(r, DeployerIdPathVar)
+	parentsTable.SetParentUp(parentId)
+}
+
+func sendHeartbeatsPeriodically() {
+	ticker := time.NewTicker(heartbeatTimeout * time.Second)
+
+	for {
+		children.Range(func(key, value interface{}) bool {
+			child := value.(typeChildrenMapValue)
+			req := http_utils.BuildRequest(http.MethodPost, child.Addr, api.GetParentAlivePath(myself.Id), nil)
+			status, _ := http_utils.DoRequest(httpClient, req, nil)
+			if status != http.StatusOK {
+				log.Errorf("got status %s while telling %s that i was alive", status, child.Id)
+			}
+
+			return true
+		})
+
+		<-ticker.C
+	}
+}
+
 func checkParentHeartbeatsPeriodically() {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(checkParentsTimeout * time.Second)
 	for {
 		<-ticker.C
 		deadParents := parentsTable.CheckDeadParents()

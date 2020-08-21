@@ -23,6 +23,7 @@ const (
 	takeChildName               = "TAKE_CHILD"
 	iAmYourParentName           = "I_AM_YOUR_PARENT"
 	getHierarchyTableName       = "GET_TABLE"
+	parentAliveName             = "PARENT_ALIVE"
 
 	// scheduler
 	heartbeatServiceInstanceName         = "HEARTBEAT_SERVICE_INSTANCE"
@@ -58,9 +59,17 @@ var (
 		_instanceIdPathVarFormatted)
 	deploymentInstanceRoute = fmt.Sprintf(api.DeploymentInstancePath, _deploymentIdPathVarFormatted,
 		_instanceIdPathVarFormatted)
+	parentAliveRoute = fmt.Sprintf(api.ParentAlivePath, _deployerIdPathVarFormatted)
 )
 
 var routes = []http_utils.Route{
+	{
+		Name:        parentAliveName,
+		Method:      http.MethodPost,
+		Pattern:     parentAliveRoute,
+		HandlerFunc: parentAliveHandler,
+	},
+
 	{
 		Name:        qualityNotAssuredName,
 		Method:      http.MethodPost,
