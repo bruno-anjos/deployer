@@ -295,6 +295,10 @@ func checkParentHeartbeatsPeriodically() {
 
 		for _, deadParent := range deadParents {
 			log.Debugf("dead parent: %+v", deadParent)
+			filename := alternativesDir + deadParent.Addr
+			if _, err := os.Stat(filename); os.IsNotExist(err) {
+				os.Remove(filename)
+			}
 			renegotiateParent(deadParent)
 		}
 	}
