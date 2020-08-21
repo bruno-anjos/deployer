@@ -1,16 +1,13 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
-	"io"
 	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -36,10 +33,13 @@ const (
 	sendAlternativesTimeout = 30
 
 	maxHopsToLookFor = 5
+
+	alternativesDir = "/alternatives/"
 )
 
 var (
-	myself *genericutils.Node
+	hostname string
+	myself   *genericutils.Node
 
 	httpClient *http.Client
 
@@ -56,6 +56,12 @@ var (
 )
 
 func init() {
+	var err error
+	hostname, err = os.Hostname()
+	if err != nil {
+		panic(err)
+	}
+
 	deployerId := uuid.New()
 	myself = &genericutils.Node{
 		Id:   deployerId.String(),
@@ -562,106 +568,44 @@ func addNode(nodeDeployerId, addr string) bool {
 }
 
 func simulateAlternatives() {
-	const (
-		alternativesFilename = "alternatives.txt"
-	)
-
-	go writeMyselfToAlternatives(alternativesFilename)
-	go loadAlternativesPeriodically(alternativesFilename)
+	go writeMyselfToAlternatives()
+	go loadAlternativesPeriodically()
 }
 
-func writeMyselfToAlternatives(alternativesFilename string) {
+func writeMyselfToAlternatives() {
 	ticker := time.NewTicker(30 * time.Second)
-	for {
-		f, err := os.OpenFile(alternativesFilename, os.O_APPEND|os.O_WRONLY, 0600)
-		if err != nil {
-			log.Error(err)
-			<-ticker.C
-			continue
-		}
-
-		bytes, err := ioutil.ReadFile(alternativesFilename)
-		if err != nil {
-			log.Error(err)
-			<-ticker.C
-			continue
-		}
-
-		hostname, err := os.Hostname()
-		if err != nil {
-			log.Error(err)
-			<-ticker.C
-			continue
-		}
-
-		alternatives := string(bytes)
-		if strings.Contains(alternatives, hostname) {
-			<-ticker.C
-			continue
-		}
-
-		if _, err = f.WriteString(hostname + "\n"); err != nil {
-			log.Error(err)
-			<-ticker.C
-			continue
-		}
-
-		err = f.Close()
-		if err != nil {
-			log.Error(err)
-			<-ticker.C
-			continue
-		}
-
-		<-ticker.C
-	}
-}
-
-func loadAlternativesPeriodically(alternativesFilename string) {
-	ticker := time.NewTicker(30 * time.Second)
-
-	var hostname string
-	hostname, err := os.Hostname()
-	if err != nil {
-		panic(err)
-	}
+	filename := alternativesDir + hostname
 
 	for {
-		<-ticker.C
-
-		f, err := os.OpenFile(alternativesFilename, os.O_RDONLY, os.ModePerm)
-		if err != nil {
-			log.Errorf("error opening file %s: %s", alternativesFilename, err)
-			continue
-		}
-
-		rd := bufio.NewReader(f)
-		for {
-			var addr string
-			addr, err = rd.ReadString('\n')
+		if _, err := os.Stat(filename); os.IsNotExist(err) {
+			_, err = os.Create(filename)
 			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				log.Errorf("read file line error: %v", err)
-				break
+				panic(err)
 			}
+		}
 
+		<-ticker.C
+	}
+}
+
+func loadAlternativesPeriodically() {
+	ticker := time.NewTicker(30 * time.Second)
+
+	for {
+		<-ticker.C
+
+		files, err := ioutil.ReadDir(alternativesDir)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, f := range files {
+			addr := f.Name()
 			if addr == hostname {
 				continue
 			}
 
 			onNodeUp(addr)
-
-		}
-
-		if err != nil {
-			continue
-		}
-
-		err = f.Close()
-		if err != nil {
-			log.Error(err)
 		}
 	}
 }
