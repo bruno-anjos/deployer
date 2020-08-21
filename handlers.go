@@ -26,8 +26,9 @@ import (
 
 type (
 	typeMyAlternativesMapValue = *genericutils.Node
+	typeChildrenMapValue       = *genericutils.Node
 
-	typeChildrenMapValue = *genericutils.Node
+	typeSuspectedChildMapKey   = string
 )
 
 const (
@@ -55,7 +56,8 @@ var (
 	hierarchyTable *HierarchyTable
 	parentsTable   *ParentsTable
 
-	children sync.Map
+	suspectedChild sync.Map
+	children       sync.Map
 
 	timer *time.Timer
 )
@@ -81,8 +83,9 @@ func init() {
 	nodeAlternatives = map[string][]*genericutils.Node{}
 	nodeAlternativesLock = sync.RWMutex{}
 	hierarchyTable = NewHierarchyTable()
-
 	parentsTable = NewParentsTable()
+
+	suspectedChild = sync.Map{}
 	children = sync.Map{}
 
 	timer = time.NewTimer(sendAlternativesTimeout * time.Second)
@@ -195,6 +198,13 @@ func setAlternativesHandler(_ http.ResponseWriter, r *http.Request) {
 func deadChildHandler(_ http.ResponseWriter, r *http.Request) {
 	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
 	deadChildId := http_utils.ExtractPathVar(r, DeployerIdPathVar)
+
+	_, ok := suspectedChild.Load(deadChildId)
+	if ok {
+		log.Debugf("%s deployment from %s reported as dead, but ignored, already negotiating", deploymentId,
+			deadChildId)
+		return
+	}
 
 	grandchild := &genericutils.Node{}
 	err := json.NewDecoder(r.Body).Decode(grandchild)
@@ -331,17 +341,25 @@ func waitForNewDeploymentParent(deploymentId string, newParentChan <-chan string
 func attemptToExtend(deploymentId string, grandchild *genericutils.Node, location string, maxHops int) {
 	extendTimer := time.NewTimer(extendAttemptTimeout * time.Second)
 
+	toExclude := map[string]struct{}{grandchild.Id: {}}
+	suspectedChild.Range(func(key, value interface{}) bool {
+		suspectedId := key.(typeSuspectedChildMapKey)
+		toExclude[suspectedId] = struct{}{}
+		return true
+	})
+
 	var (
 		success      bool
 		newChildAddr string
 		tries        = 0
 	)
-	for !success && tries < 10 {
-		newChildAddr = getNodeCloserTo(location, maxHops)
+	for !success {
+		newChildAddr = getNodeCloserTo(location, maxHops, toExclude)
 		success = extendDeployment(deploymentId, newChildAddr, grandchild)
 		tries++
 		if tries == 10 {
-			break
+			log.Errorf("failed to extend deployment %s", deploymentId)
+			return
 		}
 		<-extendTimer.C
 	}
@@ -404,13 +422,16 @@ func extendDeployment(deploymentId, childAddr string, grandChild *genericutils.N
 }
 
 // TODO function simulation lower API
-func getNodeCloserTo(location string, maxHopsToLookFor int) string {
+func getNodeCloserTo(location string, maxHopsToLookFor int, excludeNodes map[string]struct{}) string {
 	var (
 		alternatives []*genericutils.Node
 	)
 
 	myAlternatives.Range(func(key, value interface{}) bool {
 		node := value.(typeMyAlternativesMapValue)
+		if _, ok := excludeNodes[node.Id]; ok {
+			return true
+		}
 		alternatives = append(alternatives, node)
 		return true
 	})
@@ -547,8 +568,6 @@ func getDeployerIdFromAddr(addr string) (string, error) {
 
 	req := http_utils.BuildRequest(http.MethodGet, otherDeployerAddr, api.GetWhoAreYouPath(), nil)
 	status, _ := http_utils.DoRequest(httpClient, req, &nodeDeployerId)
-
-	log.Debugf("other deployer id is %s", nodeDeployerId)
 
 	if status != http.StatusOK {
 		log.Errorf("got status code %d from other deployer", status)
