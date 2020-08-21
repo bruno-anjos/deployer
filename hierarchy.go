@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bruno-anjos/deployer/api"
@@ -288,9 +290,91 @@ func (t *HierarchyTable) ToDTO() map[string]*HierarchyEntryDTO {
 	return entries
 }
 
+const (
+	alive     = 1
+	suspected = 0
+)
+
+type (
+	ParentsEntry struct {
+		Parent           *genericutils.Node
+		NumOfDeployments int32
+		IsUp             int32
+	}
+
+	ParentsTable struct {
+		parentEntries sync.Map
+	}
+
+	typeParentEntriesMapValue = *ParentsEntry
+)
+
+func NewParentsTable() *ParentsTable {
+	return &ParentsTable{
+		parentEntries: sync.Map{},
+	}
+}
+
+func (t *ParentsTable) AddParent(parent *genericutils.Node) {
+	parentEntry := &ParentsEntry{
+		Parent:           parent,
+		NumOfDeployments: 1,
+		IsUp:             alive,
+	}
+
+	t.parentEntries.Store(parent.Id, parentEntry)
+}
+
+func (t *ParentsTable) HasParent(parentId string) bool {
+	_, ok := t.parentEntries.Load(parentId)
+	return ok
+}
+
+func (t *ParentsTable) DecreaseParentCount(parentId string) (isZero bool) {
+	isZero = false
+	value, ok := t.parentEntries.Load(parentId)
+	if !ok {
+		return
+	}
+
+	parentEntry := value.(typeParentEntriesMapValue)
+	atomic.AddInt32(&parentEntry.NumOfDeployments, -1)
+	return
+}
+
+func (t *ParentsTable) RemoveParent(parentId string) {
+	t.parentEntries.Delete(parentId)
+}
+
+func (t *ParentsTable) SetParentUp(parentId string) {
+	value, ok := t.parentEntries.Load(parentId)
+	if !ok {
+		return
+	}
+
+	parentEntry := value.(typeParentEntriesMapValue)
+	atomic.StoreInt32(&parentEntry.IsUp, alive)
+}
+
+func (t *ParentsTable) CheckDeadParents() (deadParents []*genericutils.Node) {
+	t.parentEntries.Range(func(key, value interface{}) bool {
+		parentEntry := value.(typeParentEntriesMapValue)
+
+		isAlive := atomic.CompareAndSwapInt32(&parentEntry.IsUp, alive, suspected)
+		if !isAlive {
+			deadParents = append(deadParents, parentEntry.Parent)
+		}
+
+		return true
+	})
+
+	return
+}
+
+
 /*
 	HANDLERS
- */
+*/
 
 func deadChildHandler(_ http.ResponseWriter, r *http.Request) {
 	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
@@ -362,6 +446,10 @@ func parentAliveHandler(_ http.ResponseWriter, r *http.Request) {
 	parentId := http_utils.ExtractPathVar(r, DeployerIdPathVar)
 	parentsTable.SetParentUp(parentId)
 }
+
+/*
+	HELPER METHODS
+*/
 
 func renegotiateParent(deadParent *genericutils.Node) {
 	deploymentIds := hierarchyTable.GetDeploymentsWithParent(deadParent.Id)
@@ -485,4 +573,13 @@ func extendDeployment(deploymentId, childAddr string, grandChild *genericutils.N
 	children.Store(childId, child)
 
 	return true
+}
+
+func loadFallbackHostname(filename string) string {
+	fileBytes, err := ioutil.ReadFile(filename)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(fileBytes)
 }
