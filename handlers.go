@@ -585,7 +585,7 @@ func writeMyselfToAlternatives() {
 		if _, err := os.Stat(filename); os.IsNotExist(err) {
 			_, err = os.Create(filename)
 			if err != nil {
-				panic(err)
+				log.Error(err)
 			}
 		}
 
