@@ -13,7 +13,6 @@ const (
 	DeploymentPath  = "/deployments/%s"
 
 	AddNodePath  = "/node"
-	WasAddedPath = "/added/%s"
 
 	WhoAreYouPath = "/who"
 
@@ -58,10 +57,6 @@ func GetImYourParentPath(deploymentId string) string {
 
 func GetAddNodePath() string {
 	return PrefixPath + AddNodePath
-}
-
-func GetWasAddedPath(myself string) string {
-	return PrefixPath + fmt.Sprintf(WasAddedPath, myself)
 }
 
 func GetParentAlivePath(parentId string) string {

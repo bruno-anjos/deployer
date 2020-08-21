@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io/ioutil"
 	"math/rand"
-	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -61,17 +60,15 @@ var (
 )
 
 func init() {
-	var err error
-	hostname, err = os.Hostname()
+	aux, err := os.Hostname()
 	if err != nil {
 		panic(err)
 	}
 
+	hostname = aux + ":" + strconv.Itoa(api.Port)
+
 	deployerId := uuid.New()
-	myself = &genericutils.Node{
-		Id:   deployerId.String(),
-		Addr: "",
-	}
+	myself = genericutils.NewNode(deployerId.String(), hostname)
 
 	log.Debugf("DEPLOYER_ID: %s", deployerId)
 
@@ -140,13 +137,6 @@ func registerDeploymentHandler(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	addrFrom, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		panic(err)
-	}
-
-	preprocessMessage(&deploymentDTO, addrFrom)
-
 	if hierarchyTable.HasDeployment(deploymentDTO.DeploymentId) {
 		w.WriteHeader(http.StatusConflict)
 		return
@@ -196,16 +186,6 @@ func addNodeHandler(_ http.ResponseWriter, r *http.Request) {
 	onNodeUp(nodeAddr)
 }
 
-func wasAddedHandler(_ http.ResponseWriter, r *http.Request) {
-	log.Debugf("handling request in wasAddedHandler")
-	deployerIdWhoAddedMe := http_utils.ExtractPathVar(r, DeployerIdPathVar)
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		panic(err)
-	}
-	addNode(deployerIdWhoAddedMe, host)
-}
-
 func setAlternativesHandler(_ http.ResponseWriter, r *http.Request) {
 	deployerId := http_utils.ExtractPathVar(r, DeployerIdPathVar)
 
@@ -248,10 +228,7 @@ func deadChildHandler(_ http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	hierarchyTable.AddChild(deploymentId, &genericutils.Node{
-		Id:   newChildId,
-		Addr: newChildAddr,
-	})
+	hierarchyTable.AddChild(deploymentId, genericutils.NewNode(newChildId, newChildAddr))
 }
 
 func takeChildHandler(w http.ResponseWriter, r *http.Request) {
@@ -284,11 +261,6 @@ func iAmYourParentHandler(_ http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Debugf("told to accept %s as parent for deployment %s", parent.Id, deploymentId)
-
-	parent.Addr, _, err = net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		panic(err)
-	}
 
 	hierarchyTable.SetDeploymentParent(deploymentId, parent)
 }
@@ -394,10 +366,7 @@ func extendDeployment(deploymentId, nodeAddr string, grandChild *genericutils.No
 		return false
 	}
 
-	child := &genericutils.Node{
-		Id:   childId,
-		Addr: nodeAddr,
-	}
+	child := genericutils.NewNode(childId, nodeAddr)
 
 	log.Debugf("extending deployment %s to %s", deploymentId, childId)
 
@@ -579,7 +548,7 @@ func getDeployerIdFromAddr(addr string) (string, error) {
 	log.Debugf("other deployer id is %s", nodeDeployerId)
 
 	if status != http.StatusOK {
-		log.Error("got status code %d from other deployer", status)
+		log.Errorf("got status code %d from other deployer", status)
 		return "", errors.New("got status code %d from other deployer")
 	}
 
@@ -606,10 +575,7 @@ func addNode(nodeDeployerId, addr string) bool {
 
 	log.Debugf("added node %s", nodeDeployerId)
 
-	neighbor := &genericutils.Node{
-		Id:   nodeDeployerId,
-		Addr: addr,
-	}
+	neighbor := genericutils.NewNode(nodeDeployerId, addr)
 
 	myAlternatives.Store(nodeDeployerId, neighbor)
 	return true
@@ -674,16 +640,10 @@ func onNodeDown(addr string) {
 	if err != nil {
 		return
 	}
-	
+
 	myAlternatives.Delete(id)
 	sendAlternatives()
 	timer.Reset(sendAlternativesTimeout * time.Second)
-}
-
-func preprocessMessage(deployment *api.DeploymentDTO, addrFrom string) {
-	if deployment.Parent != nil {
-		deployment.Parent.Addr = addrFrom
-	}
 }
 
 func sendAlternativesPeriodically() {

@@ -16,7 +16,6 @@ const (
 	deleteDeploymentName        = "DELETE_DEPLOYMENT"
 	whoAreYouName               = "WHO_ARE_YOU"
 	addNodeName                 = "ADD_NODE"
-	wasAddedName                = "WAS_ADDED"
 	setAlternativesName         = "SET_ALTERNATIVES"
 	qualityNotAssuredName       = "QUALITY_NOT_ASSURED"
 	deadChildName               = "DEAD_CHILD"
@@ -45,7 +44,6 @@ var (
 	deploymentsRoute       = api.DeploymentsPath
 	deploymentRoute        = fmt.Sprintf(api.DeploymentPath, _deploymentIdPathVarFormatted)
 	addNodeRoute           = api.AddNodePath
-	wasAddedRoute          = fmt.Sprintf(api.WasAddedPath, _deployerIdPathVarFormatted)
 	whoAreYouRoute         = api.WhoAreYouPath
 	setAlternativesRoute   = fmt.Sprintf(api.SetAlternativesPath, _deployerIdPathVarFormatted)
 	deploymentQualityRoute = fmt.Sprintf(api.DeploymentQualityPath, _deploymentIdPathVarFormatted)
@@ -131,13 +129,6 @@ var routes = []http_utils.Route{
 		Method:      http.MethodPost,
 		Pattern:     addNodeRoute,
 		HandlerFunc: addNodeHandler,
-	},
-
-	{
-		Name:        wasAddedName,
-		Method:      http.MethodPost,
-		Pattern:     wasAddedRoute,
-		HandlerFunc: wasAddedHandler,
 	},
 
 	{
