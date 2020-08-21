@@ -124,7 +124,7 @@ func getDeploymentsHandler(w http.ResponseWriter, _ *http.Request) {
 	http_utils.SendJSONReplyOK(w, deployments)
 }
 
-func registerDeploymentHandler(_ http.ResponseWriter, r *http.Request) {
+func registerDeploymentHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debug("handling register deployment request")
 
 	var deploymentDTO api.DeploymentDTO
@@ -145,6 +145,11 @@ func registerDeploymentHandler(_ http.ResponseWriter, r *http.Request) {
 	}
 
 	preprocessMessage(&deploymentDTO, addrFrom)
+
+	if hierarchyTable.HasDeployment(deploymentDTO.DeploymentId) {
+		w.WriteHeader(http.StatusConflict)
+		return
+	}
 
 	hierarchyTable.AddDeployment(&deploymentDTO)
 	if deploymentDTO.Parent != nil {
@@ -322,6 +327,11 @@ func checkParentHeartbeatsPeriodically() {
 	for {
 		<-ticker.C
 		deadParents := parentsTable.CheckDeadParents()
+		if len(deadParents) == 0 {
+			log.Debugf("all parents alive")
+			continue
+		}
+
 		for _, deadParent := range deadParents {
 			log.Debugf("dead parent: %+v", deadParent)
 			renegotiateParent(deadParent)
