@@ -590,6 +590,8 @@ func addNode(nodeDeployerId, addr string) bool {
 		return true
 	}
 
+	suspectedChild.Delete(nodeDeployerId)
+
 	_, ok := myAlternatives.Load(nodeDeployerId)
 	if ok {
 		return true
