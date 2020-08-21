@@ -214,6 +214,7 @@ func deadChildHandler(_ http.ResponseWriter, r *http.Request) {
 	log.Debugf("grandchild %s reported deployment %s from %s as dead", grandchild.Id, deploymentId, deadChildId)
 
 	hierarchyTable.RemoveChild(deploymentId, deadChildId)
+	children.Delete(deadChildId)
 
 	var (
 		success      bool
@@ -283,7 +284,7 @@ func sendHeartbeatsPeriodically() {
 			req := http_utils.BuildRequest(http.MethodPost, child.Addr, api.GetParentAlivePath(myself.Id), nil)
 			status, _ := http_utils.DoRequest(httpClient, req, nil)
 			if status != http.StatusOK {
-				log.Errorf("got status %s while telling %s that i was alive", status, child.Id)
+				log.Errorf("got status %d while telling %s that i was alive", status, child.Id)
 			}
 
 			return true
@@ -348,7 +349,7 @@ func waitForNewDeploymentParent(deploymentId string, newParentChan <-chan string
 	}
 }
 
-func extendDeployment(deploymentId, nodeAddr string, grandChild *genericutils.Node) bool {
+func extendDeployment(deploymentId, childAddr string, grandChild *genericutils.Node) bool {
 	dto, ok := hierarchyTable.DeploymentToDTO(deploymentId)
 	if !ok {
 		log.Errorf("hierarchy table does not contain deployment %s", deploymentId)
@@ -359,14 +360,18 @@ func extendDeployment(deploymentId, nodeAddr string, grandChild *genericutils.No
 	dto.Grandparent = childGrandparent
 	dto.Parent = myself
 
-	deployerHostPort := addPortToAddr(nodeAddr)
+	deployerHostPort := addPortToAddr(childAddr)
 
-	childId, err := getDeployerIdFromAddr(nodeAddr)
+	childId, err := getDeployerIdFromAddr(childAddr)
 	if err != nil {
 		return false
 	}
 
-	child := genericutils.NewNode(childId, nodeAddr)
+	if grandChild != nil && grandChild.Id == childId {
+		return false
+	}
+
+	child := genericutils.NewNode(childId, childAddr)
 
 	log.Debugf("extending deployment %s to %s", deploymentId, childId)
 
@@ -389,7 +394,7 @@ func extendDeployment(deploymentId, nodeAddr string, grandChild *genericutils.No
 			return false
 		}
 	} else if status != http.StatusOK {
-		log.Errorf("got %d while extending deployment %s to %s", status, deploymentId, nodeAddr)
+		log.Errorf("got %d while extending deployment %s to %s", status, deploymentId, childAddr)
 		return false
 	}
 
