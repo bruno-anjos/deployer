@@ -213,7 +213,7 @@ func deadChildHandler(_ http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Debugf("grandchild %s reported deployment %s from %s as dead", grandchild.Id, deploymentId, deadChildId)
-
+	suspectedChild.Store(deadChildId, nil)
 	hierarchyTable.RemoveChild(deploymentId, deadChildId)
 	children.Delete(deadChildId)
 
