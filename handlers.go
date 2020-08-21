@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -529,7 +530,11 @@ func deploymentYAMLToDeployment(deploymentYAML *DeploymentYAML, static bool) *De
 func getDeployerIdFromAddr(addr string) string {
 	var nodeDeployerId string
 
-	otherDeployerAddr := addr + ":" + strconv.Itoa(api.Port)
+	otherDeployerAddr := addr
+	if !strings.Contains(addr, ":") {
+		otherDeployerAddr = addr + ":" + strconv.Itoa(api.Port)
+	}
+
 	req := http_utils.BuildRequest(http.MethodGet, otherDeployerAddr, api.GetWhoAreYouPath(), nil)
 	status, _ := http_utils.DoRequest(httpClient, req, &nodeDeployerId)
 
@@ -574,7 +579,7 @@ func simulateAlternatives() {
 
 func writeMyselfToAlternatives() {
 	ticker := time.NewTicker(30 * time.Second)
-	filename := alternativesDir + hostname
+	filename := alternativesDir + hostname + ":" + strconv.Itoa(api.Port)
 
 	for {
 		if _, err := os.Stat(filename); os.IsNotExist(err) {
