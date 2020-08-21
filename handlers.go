@@ -37,8 +37,9 @@ const (
 
 	alternativesDir = "/alternatives/"
 
-	checkParentsTimeout = 30
-	heartbeatTimeout    = 10
+	checkParentsTimeout  = 30
+	heartbeatTimeout     = 10
+	extendAttemptTimeout = 10
 )
 
 var (
@@ -93,7 +94,7 @@ func init() {
 	go checkParentHeartbeatsPeriodically()
 }
 
-func qualityNotAssuredHandler(w http.ResponseWriter, r *http.Request) {
+func qualityNotAssuredHandler(_ http.ResponseWriter, r *http.Request) {
 	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
 
 	log.Debugf("quality not assured for %s", deploymentId)
@@ -104,17 +105,7 @@ func qualityNotAssuredHandler(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	success := false
-	for !success {
-		nodeAddr := getNodeCloserTo(location, maxHopsToLookFor)
-
-		if nodeAddr == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		success = extendDeployment(deploymentId, nodeAddr, nil)
-	}
+	go attemptToExtend(deploymentId, nil, location, maxHopsToLookFor)
 }
 
 func getDeploymentsHandler(w http.ResponseWriter, _ *http.Request) {
@@ -216,20 +207,7 @@ func deadChildHandler(_ http.ResponseWriter, r *http.Request) {
 	hierarchyTable.RemoveChild(deploymentId, deadChildId)
 	children.Delete(deadChildId)
 
-	var (
-		success      bool
-		newChildAddr string
-	)
-	for !success {
-		newChildAddr = getNodeCloserTo("", 0)
-		success = extendDeployment(deploymentId, newChildAddr, grandchild)
-	}
-
-	newChildId, err := getDeployerIdFromAddr(newChildAddr)
-	if err != nil {
-		return
-	}
-	hierarchyTable.AddChild(deploymentId, genericutils.NewNode(newChildId, newChildAddr))
+	go attemptToExtend(deploymentId, grandchild, "", 0)
 }
 
 func takeChildHandler(w http.ResponseWriter, r *http.Request) {
@@ -264,6 +242,7 @@ func iAmYourParentHandler(_ http.ResponseWriter, r *http.Request) {
 	log.Debugf("told to accept %s as parent for deployment %s", parent.Id, deploymentId)
 
 	hierarchyTable.SetDeploymentParent(deploymentId, parent)
+
 }
 
 func getHierarchyTableHandler(w http.ResponseWriter, _ *http.Request) {
@@ -346,6 +325,25 @@ func waitForNewDeploymentParent(deploymentId string, newParentChan <-chan string
 	case newParentId := <-newParentChan:
 		log.Debugf("got new parent %s for deployment %s", newParentId, deploymentId)
 		return
+	}
+}
+
+func attemptToExtend(deploymentId string, grandchild *genericutils.Node, location string, maxHops int) {
+	extendTimer := time.NewTimer(extendAttemptTimeout * time.Second)
+
+	var (
+		success      bool
+		newChildAddr string
+		tries        = 0
+	)
+	for !success && tries < 10 {
+		newChildAddr = getNodeCloserTo(location, maxHops)
+		success = extendDeployment(deploymentId, newChildAddr, grandchild)
+		tries++
+		if tries == 10 {
+			break
+		}
+		<-extendTimer.C
 	}
 }
 
