@@ -350,7 +350,7 @@ func extendDeployment(deploymentId, nodeAddr string, grandChild *genericutils.No
 	dto.Grandparent = childGrandparent
 	dto.Parent = myself
 
-	deployerHostPort := nodeAddr + ":" + strconv.Itoa(api.Port)
+	deployerHostPort := addPortToAddr(nodeAddr)
 
 	childId := getDeployerIdFromAddr(nodeAddr)
 	child := &genericutils.Node{
@@ -530,10 +530,7 @@ func deploymentYAMLToDeployment(deploymentYAML *DeploymentYAML, static bool) *De
 func getDeployerIdFromAddr(addr string) string {
 	var nodeDeployerId string
 
-	otherDeployerAddr := addr
-	if !strings.Contains(addr, ":") {
-		otherDeployerAddr = addr + ":" + strconv.Itoa(api.Port)
-	}
+	otherDeployerAddr := addPortToAddr(addr)
 
 	req := http_utils.BuildRequest(http.MethodGet, otherDeployerAddr, api.GetWhoAreYouPath(), nil)
 	status, _ := http_utils.DoRequest(httpClient, req, &nodeDeployerId)
@@ -579,7 +576,7 @@ func simulateAlternatives() {
 
 func writeMyselfToAlternatives() {
 	ticker := time.NewTicker(30 * time.Second)
-	filename := alternativesDir + hostname + ":" + strconv.Itoa(api.Port)
+	filename := alternativesDir + addPortToAddr(hostname)
 
 	for {
 		if _, err := os.Stat(filename); os.IsNotExist(err) {
@@ -670,4 +667,11 @@ func sendAlternativesTo(neighbor *genericutils.Node, alternatives []*genericutil
 	if status != http.StatusOK {
 		log.Errorf("got status %d while sending alternatives to %s", status, neighbor.Addr)
 	}
+}
+
+func addPortToAddr(addr string) string {
+	if !strings.Contains(addr, ":") {
+		return addr + ":" + strconv.Itoa(api.Port)
+	}
+	return addr
 }
