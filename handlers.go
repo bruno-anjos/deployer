@@ -139,7 +139,7 @@ func registerDeploymentHandler(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	addrFrom, _, err := net.SplitHostPort(r.Host)
+	addrFrom, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		panic(err)
 	}
@@ -157,11 +157,6 @@ func registerDeploymentHandler(w http.ResponseWriter, r *http.Request) {
 		ok := parentsTable.HasParent(parent.Id)
 		if !ok {
 			parentsTable.AddParent(parent)
-		}
-
-		grandparent := deploymentDTO.Grandparent
-		if grandparent != nil {
-
 		}
 	}
 
@@ -286,7 +281,7 @@ func iAmYourParentHandler(_ http.ResponseWriter, r *http.Request) {
 
 	log.Debugf("told to accept %s as parent for deployment %s", parent.Id, deploymentId)
 
-	parent.Addr, _, err = net.SplitHostPort(r.Host)
+	parent.Addr, _, err = net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		panic(err)
 	}
@@ -384,17 +379,9 @@ func extendDeployment(deploymentId, nodeAddr string, grandChild *genericutils.No
 		return false
 	}
 
-	log.Debugf("original parent before: %+v", hierarchyTable.GetParent(deploymentId))
-	log.Debugf("current parent before: %+v", dto.Parent)
-
 	childGrandparent := hierarchyTable.GetParent(deploymentId)
 	dto.Grandparent = childGrandparent
 	dto.Parent = myself
-
-	log.Debugf("original parent after: %+v", hierarchyTable.GetParent(deploymentId))
-	log.Debugf("current parent after: %+v", dto.Parent)
-
-	log.Debugf("myself: %+v", myself)
 
 	deployerHostPort := addPortToAddr(nodeAddr)
 
