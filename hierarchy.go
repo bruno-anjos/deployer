@@ -1,10 +1,15 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
 	"sync"
+	"time"
 
 	"github.com/bruno-anjos/deployer/api"
 	genericutils "github.com/bruno-anjos/solution-utils"
+	"github.com/bruno-anjos/solution-utils/http_utils"
+	log "github.com/sirupsen/logrus"
 )
 
 type (
@@ -281,4 +286,203 @@ func (t *HierarchyTable) ToDTO() map[string]*HierarchyEntryDTO {
 	})
 
 	return entries
+}
+
+/*
+	HANDLERS
+ */
+
+func deadChildHandler(_ http.ResponseWriter, r *http.Request) {
+	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
+	deadChildId := http_utils.ExtractPathVar(r, DeployerIdPathVar)
+
+	_, ok := suspectedChild.Load(deadChildId)
+	if ok {
+		log.Debugf("%s deployment from %s reported as dead, but ignored, already negotiating", deploymentId,
+			deadChildId)
+		return
+	}
+
+	grandchild := &genericutils.Node{}
+	err := json.NewDecoder(r.Body).Decode(grandchild)
+	if err != nil {
+		panic(err)
+	}
+
+	log.Debugf("grandchild %s reported deployment %s from %s as dead", grandchild.Id, deploymentId, deadChildId)
+	suspectedChild.Store(deadChildId, nil)
+	hierarchyTable.RemoveChild(deploymentId, deadChildId)
+	children.Delete(deadChildId)
+
+	go attemptToExtend(deploymentId, grandchild, "", 0)
+}
+
+func takeChildHandler(w http.ResponseWriter, r *http.Request) {
+	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
+
+	child := &genericutils.Node{}
+	err := json.NewDecoder(r.Body).Decode(child)
+	if err != nil {
+		panic(err)
+	}
+
+	log.Debugf("told to accept %s as child for deployment %s", child.Id, deploymentId)
+
+	req := http_utils.BuildRequest(http.MethodPost, child.Addr, api.GetImYourParentPath(deploymentId), myself)
+	status, _ := http_utils.DoRequest(httpClient, req, nil)
+	if status != http.StatusOK {
+		log.Errorf("got status %d while telling %s that im his parent", status, child.Id)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	hierarchyTable.AddChild(deploymentId, child)
+	children.Store(child.Id, child)
+}
+
+func iAmYourParentHandler(_ http.ResponseWriter, r *http.Request) {
+	deploymentId := http_utils.ExtractPathVar(r, DeploymentIdPathVar)
+
+	parent := &genericutils.Node{}
+	err := json.NewDecoder(r.Body).Decode(parent)
+	if err != nil {
+		panic(err)
+	}
+
+	log.Debugf("told to accept %s as parent for deployment %s", parent.Id, deploymentId)
+
+	hierarchyTable.SetDeploymentParent(deploymentId, parent)
+}
+
+func getHierarchyTableHandler(w http.ResponseWriter, _ *http.Request) {
+	http_utils.SendJSONReplyOK(w, hierarchyTable.ToDTO())
+}
+
+func parentAliveHandler(_ http.ResponseWriter, r *http.Request) {
+	parentId := http_utils.ExtractPathVar(r, DeployerIdPathVar)
+	parentsTable.SetParentUp(parentId)
+}
+
+func renegotiateParent(deadParent *genericutils.Node) {
+	deploymentIds := hierarchyTable.GetDeploymentsWithParent(deadParent.Id)
+
+	log.Debugf("renegotiating deployments %+v with parent %s", deploymentIds, deadParent.Id)
+
+	for _, deploymentId := range deploymentIds {
+		grandparent := hierarchyTable.GetGrandparent(deploymentId)
+		if grandparent == nil {
+			panic("TODO fallback")
+		}
+
+		newParentChan := hierarchyTable.SetDeploymentAsOrphan(deploymentId)
+
+		req := http_utils.BuildRequest(http.MethodPost, grandparent.Addr,
+			api.GetDeadChildPath(deploymentId, deadParent.Id), myself)
+		status, _ := http_utils.DoRequest(httpClient, req, nil)
+		if status != http.StatusOK {
+			log.Errorf("got status %d while renegotiating parent %s with %s for deployment %s", status,
+				deadParent, grandparent.Id, deploymentId)
+			continue
+		}
+
+		go waitForNewDeploymentParent(deploymentId, newParentChan)
+	}
+}
+
+func waitForNewDeploymentParent(deploymentId string, newParentChan <-chan string) {
+	waitingTimer := time.NewTimer(waitForNewParentTimeout * time.Second)
+
+	log.Debugf("waiting new parent for %s", deploymentId)
+
+	select {
+	case <-waitingTimer.C:
+		panic("TODO fallback")
+	case newParentId := <-newParentChan:
+		log.Debugf("got new parent %s for deployment %s", newParentId, deploymentId)
+		return
+	}
+}
+
+func attemptToExtend(deploymentId string, grandchild *genericutils.Node, location string, maxHops int) {
+	extendTimer := time.NewTimer(extendAttemptTimeout * time.Second)
+
+	toExclude := map[string]struct{}{}
+	if grandchild != nil {
+		toExclude[grandchild.Id] = struct{}{}
+	}
+	suspectedChild.Range(func(key, value interface{}) bool {
+		suspectedId := key.(typeSuspectedChildMapKey)
+		toExclude[suspectedId] = struct{}{}
+		return true
+	})
+
+	var (
+		success      bool
+		newChildAddr string
+		tries        = 0
+	)
+	for !success {
+		newChildAddr = getNodeCloserTo(location, maxHops, toExclude)
+		success = extendDeployment(deploymentId, newChildAddr, grandchild)
+		tries++
+		if tries == 10 {
+			log.Errorf("failed to extend deployment %s", deploymentId)
+			return
+		}
+		<-extendTimer.C
+	}
+}
+
+func extendDeployment(deploymentId, childAddr string, grandChild *genericutils.Node) bool {
+	dto, ok := hierarchyTable.DeploymentToDTO(deploymentId)
+	if !ok {
+		log.Errorf("hierarchy table does not contain deployment %s", deploymentId)
+		return false
+	}
+
+	childGrandparent := hierarchyTable.GetParent(deploymentId)
+	dto.Grandparent = childGrandparent
+	dto.Parent = myself
+
+	deployerHostPort := addPortToAddr(childAddr)
+
+	childId, err := getDeployerIdFromAddr(childAddr)
+	if err != nil {
+		return false
+	}
+
+	if grandChild != nil && grandChild.Id == childId {
+		return false
+	}
+
+	child := genericutils.NewNode(childId, childAddr)
+
+	log.Debugf("extending deployment %s to %s", deploymentId, childId)
+
+	req := http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetDeploymentsPath(), dto)
+	status, _ := http_utils.DoRequest(httpClient, req, nil)
+	if status == http.StatusConflict {
+		log.Debugf("deployment %s is already present in %s", deploymentId, childId)
+	} else if status != http.StatusOK {
+		log.Errorf("got %d while extending deployment %s to %s", status, deploymentId, childAddr)
+		return false
+	}
+
+	if grandChild != nil {
+		log.Debugf("telling %s to take grandchild %s for deployment %s", childId, grandChild.Id, deploymentId)
+		req = http_utils.BuildRequest(http.MethodPost, deployerHostPort, api.GetTakeChildPath(deploymentId),
+			grandChild)
+		status, _ = http_utils.DoRequest(httpClient, req, nil)
+		if status != http.StatusOK {
+			log.Errorf("got status %d while attempting to tell %s to take %s as child", status, childId,
+				grandChild.Id)
+			return false
+		}
+	}
+
+	log.Debugf("extended %s to %s sucessfully", deploymentId, childId)
+	hierarchyTable.AddChild(deploymentId, child)
+	children.Store(childId, child)
+
+	return true
 }
