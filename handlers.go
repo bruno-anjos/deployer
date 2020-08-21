@@ -239,6 +239,8 @@ func takeChildHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	hierarchyTable.AddChild(deploymentId, child)
 }
 
 func iAmYourParentHandler(_ http.ResponseWriter, r *http.Request) {
