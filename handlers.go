@@ -28,7 +28,7 @@ type (
 	typeMyAlternativesMapValue = *genericutils.Node
 	typeChildrenMapValue       = *genericutils.Node
 
-	typeSuspectedChildMapKey   = string
+	typeSuspectedChildMapKey = string
 )
 
 const (
@@ -341,7 +341,10 @@ func waitForNewDeploymentParent(deploymentId string, newParentChan <-chan string
 func attemptToExtend(deploymentId string, grandchild *genericutils.Node, location string, maxHops int) {
 	extendTimer := time.NewTimer(extendAttemptTimeout * time.Second)
 
-	toExclude := map[string]struct{}{grandchild.Id: {}}
+	toExclude := map[string]struct{}{}
+	if grandchild != nil {
+		toExclude[grandchild.Id] = struct{}{}
+	}
 	suspectedChild.Range(func(key, value interface{}) bool {
 		suspectedId := key.(typeSuspectedChildMapKey)
 		toExclude[suspectedId] = struct{}{}
