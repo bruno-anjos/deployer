@@ -104,7 +104,12 @@ func (t *HierarchyTable) SetDeploymentParent(deploymentId string, parent *generi
 
 	entry := value.(typeHierarchyEntriesMapValue)
 	entry.Parent = parent
-	entry.NewParentChan <- parent.Id
+
+	if entry.NewParentChan != nil {
+		entry.NewParentChan <- parent.Id
+		close(entry.NewParentChan)
+	}
+
 	entry.IsOrphan = false
 }
 
