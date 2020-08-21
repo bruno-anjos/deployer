@@ -41,6 +41,7 @@ const (
 	checkParentsTimeout  = 30
 	heartbeatTimeout     = 10
 	extendAttemptTimeout = 10
+	waitForNewParentTimeout = 60
 )
 
 var (
@@ -331,7 +332,7 @@ func renegotiateParent(deadParent *genericutils.Node) {
 }
 
 func waitForNewDeploymentParent(deploymentId string, newParentChan <-chan string) {
-	waitingTimer := time.NewTimer(30 * time.Second)
+	waitingTimer := time.NewTimer(waitForNewParentTimeout * time.Second)
 
 	select {
 	case <-waitingTimer.C:
